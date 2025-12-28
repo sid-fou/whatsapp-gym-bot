@@ -199,7 +199,7 @@ ISC License - see LICENSE file
 
 ## 📧 Contact
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
+Siddharth Singh - [@sid](https://x.com/sid_fou)
 
 Project Link: [https://github.com/yourusername/whatsapp-gym-bot](https://github.com/yourusername/whatsapp-gym-bot)
 
