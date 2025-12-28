@@ -155,35 +155,6 @@ const INTENT_PATTERNS = {
 };
 ```
 
-## 🚢 Deployment
-
-### Deploy to Railway
-
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-
-# Login
-railway login
-
-# Deploy
-railway up
-```
-
-### Deploy to Render
-
-1. Connect GitHub repo
-2. Add environment variables
-3. Deploy automatically
-
-### Deploy to Heroku
-
-```bash
-heroku create your-app-name
-git push heroku main
-heroku config:set WHATSAPP_TOKEN=xxx
-```
-
 ## 🛡️ Security Features
 
 - ✅ Environment variable validation
