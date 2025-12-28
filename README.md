@@ -201,7 +201,7 @@ ISC License - see LICENSE file
 
 Siddharth Singh - [@sid](https://x.com/sid_fou)
 
-Project Link: [https://github.com/yourusername/whatsapp-gym-bot](https://github.com/yourusername/whatsapp-gym-bot)
+Project Link: [https://github.com/yourusername/whatsapp-gym-bot](https://github.com/sid-fou/whatsapp-gym-bot)
 
 ---
 
