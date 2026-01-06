@@ -13,23 +13,23 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 
 ## ✨ Features
 
-### 🎯 Interactive Welcome Menu (NEW!)
-- **First-time customer detection** - Automatically detects new users
+### 🎯 Interactive Welcome Menu
+- **Greeting detection** - Shows menu on every greeting (Hi, Hello, Hey, etc.)
 - **Interactive list menu** with 6 quick options:
-  - 🕐 Gym Timings - Operating hours
-  - 💳 Membership Plans - Pricing (₹999/month, quarterly, annual)
-  - 🏋️ Facilities - Equipment & amenities
-  - 📍 Location & Contact - Address & phone
+  - 🕐 Gym Timings - Mon-Sat 6 AM - 10 PM, Sun 8 AM - 2 PM
+  - 💳 Membership Plans - ₹2,000/month, ₹5,500/quarter, ₹20,000/year
+  - 🏋️ Facilities - Equipment, amenities, training options
+  - 📍 Location & Contact - Sector 15, Gurugram + phone
   - 🎯 Book Trial Session - Auto-triggers handoff
   - 👤 Talk to Staff - Direct staff connection
-- **Context-aware** - Only shown on first message
-- **Auto-handoff** - Booking and staff requests trigger handoff automatically
+- **Smart handoff** - Booking and staff requests trigger handoff automatically
+- **Real gym data** - All responses sourced from `gym_knowledge.txt`
 
 ### 🤖 AI-Powered Chat
 - **Meta Llama 3.1 8B** via OpenRouter for intelligent responses
 - **Context-aware conversations** (last 10 messages stored)
 - **Intent detection** (greetings, questions, bookings, pricing)
-- **Gym knowledge base** integration
+- **Gym knowledge base** integration (`data/gym_knowledge.txt`)
 - **Guardrails** - Stays on-topic, no medical advice
 
 ### 🤝 Staff Handoff System
@@ -135,7 +135,7 @@ whatsapp-chatbot-backend/
 - Node.js 18+
 - MongoDB Atlas account
 - WhatsApp Business API access
-- Anthropic API key
+- OpenRouter API key
 - Gmail account (for email notifications)
 
 ### Step 1: Clone Repository
@@ -314,10 +314,10 @@ ngrok http 3000
 Edit `data/gym_knowledge.txt`:
 ```
 Gym Name: IronCore Fitness
-Location: Mumbai, India
-Timings: Mon-Sat 6 AM - 11 PM, Sunday 7 AM - 9 PM
-Membership: ₹999/month, ₹9999/year
-Contact: +91-XXX-XXX-XXXX
+Location: Sector 15, Gurugram, Haryana
+Timings: Mon-Sat 6 AM - 10 PM, Sunday 8 AM - 2 PM
+Membership: ₹2,000/month, ₹5,500/quarter, ₹20,000/year
+Contact: +91-8755052568
 ```
 
 ### Customize Welcome Menu
@@ -339,7 +339,7 @@ Near [Your Landmark]
 **Adjust Membership Pricing (Lines 43-67):**
 ```javascript
 *Monthly Plan*
-₹999/month  // Change as needed
+₹2,000/month  // Change as needed
 ```
 
 ### Modify Handoff Messages
