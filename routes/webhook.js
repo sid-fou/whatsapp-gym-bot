@@ -207,23 +207,32 @@ Stay strong! 🏋️‍♂️`;
   }
 }
 
-// Handle menu selection
+// Handle menu selection (uses AI for natural responses)
 async function handleMenuSelection(userId, menuSelection, contactName = null) {
   try {
-    // Get response for selected menu item
-    const response = welcomeMenu.getMenuResponse(menuSelection.id);
+    // Convert menu selection to natural language query
+    const query = welcomeMenu.getQueryForMenuSelection(menuSelection.id);
     
-    if (!response) {
+    if (!query) {
       console.log(`⚠️  Unknown menu selection: ${menuSelection.id}`);
       return;
     }
 
-    // Send response
-    await sendWhatsAppMessage(userId, { text: { body: response } });
+    console.log(`🤖 Processing menu selection as AI query: "${query}"`);
     
-    // Save to context
-    await contextService.addMessage(userId, 'user', `[Selected: ${menuSelection.title}]`);
+    // Detect intent for the query (using AI)
+    const intent = await intentService.detectIntent(query);
+    
+    // Get AI response based on gym_knowledge.txt
+    const response = await aiService.generateResponse(query, intent, userId);
+    
+    // Save to context (menu selection as user message)
+    await contextService.addMessage(userId, 'user', query);
     await contextService.addMessage(userId, 'assistant', response);
+    
+    // Send AI-generated response
+    await sendWhatsAppMessage(userId, { text: { body: response } });
+    console.log(`✅ AI response sent for menu selection: ${menuSelection.title}`);
     
     // Check if this menu item triggers handoff
     if (welcomeMenu.shouldTriggerHandoffForMenu(menuSelection.id)) {
@@ -234,7 +243,7 @@ async function handleMenuSelection(userId, menuSelection, contactName = null) {
       
       // Trigger handoff
       const reason = menuSelection.id === 'menu_trial' ? 'booking' : 'user_requested';
-      await handoffService.addToHandoffQueue(userId, `Menu: ${menuSelection.title}`, reason, contactName);
+      await handoffService.addToHandoffQueue(userId, query, reason, contactName);
       await contextService.setHandoffStatus(userId, true, reason);
       
       const handoffMessage = handoffService.getHandoffMessage(reason);
@@ -244,6 +253,10 @@ async function handleMenuSelection(userId, menuSelection, contactName = null) {
     
   } catch (error) {
     console.error('❌ Error handling menu selection:', error.message);
+    // Fallback response
+    await sendWhatsAppMessage(userId, { 
+      text: { body: "I'm having trouble processing that right now. Please try asking your question directly, or type 'staff' to speak with our team." }
+    });
   }
 }
 
@@ -379,8 +392,8 @@ async function handleCustomerMessage(userId, text, contactName = null) {
       return;
     }
 
-    // Detect intent first
-    const intent = intentService.detectIntent(text);
+    // Detect intent first (using AI)
+    const intent = await intentService.detectIntent(text);
     console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
 
     // Check if this is a greeting - send welcome menu

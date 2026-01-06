@@ -15,15 +15,17 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 
 ### 🎯 Interactive Welcome Menu
 - **Greeting detection** - Shows menu on every greeting (Hi, Hello, Hey, etc.)
+- **AI-powered responses** - Menu selections generate natural AI responses from `gym_knowledge.txt`
 - **Interactive list menu** with 6 quick options:
-  - 🕐 Gym Timings - Mon-Sat 6 AM - 10 PM, Sun 8 AM - 2 PM
-  - 💳 Membership Plans - ₹2,000/month, ₹5,500/quarter, ₹20,000/year
-  - 🏋️ Facilities - Equipment, amenities, training options
-  - 📍 Location & Contact - Sector 15, Gurugram + phone
-  - 🎯 Book Trial Session - Auto-triggers handoff
-  - 👤 Talk to Staff - Direct staff connection
-- **Smart handoff** - Booking and staff requests trigger handoff automatically
-- **Real gym data** - All responses sourced from `gym_knowledge.txt`
+  - 🕐 Gym Timings - AI explains operating hours
+  - 💳 Membership Plans - AI describes all pricing tiers
+  - 🏋️ Facilities - AI details equipment and amenities
+  - 📍 Location & Contact - AI provides address and contact info
+  - 🎯 Book Trial Session - AI explains trial + auto-triggers handoff
+  - 👤 Talk to Staff - AI acknowledges + triggers handoff
+- **Natural language** - Responses sound conversational, not templated
+- **Context-aware** - AI considers conversation history
+- **Single source** - Both menu and chat use same `gym_knowledge.txt`
 
 ### 🤖 AI-Powered Chat
 - **Meta Llama 3.1 8B** via OpenRouter for intelligent responses
@@ -311,36 +313,25 @@ ngrok http 3000
 ## 🎨 Customization
 
 ### Update Gym Information
-Edit `data/gym_knowledge.txt`:
-```
-Gym Name: IronCore Fitness
-Location: Sector 15, Gurugram, Haryana
-Timings: Mon-Sat 6 AM - 10 PM, Sunday 8 AM - 2 PM
-Membership: ₹2,000/month, ₹5,500/quarter, ₹20,000/year
-Contact: +91-8755052568
-```
+Edit `data/gym_knowledge.txt` - **All menu responses update automatically!**
+
+**Note:** The welcome menu dynamically parses this file, so any changes to `gym_knowledge.txt` will automatically reflect in menu responses (requires server restart).
 
 ### Customize Welcome Menu
-Edit `services/welcome-menu.js`:
+The welcome menu dynamically reads from `data/gym_knowledge.txt` - no code changes needed!
 
-**Update Location (Line 101):**
-```javascript
-*Address:*
-IronCore Fitness
-[Your Actual Address Here]
-Near [Your Landmark]
-```
+**To update menu responses:**
+1. Edit `data/gym_knowledge.txt` with your gym information
+2. Restart the server
+3. Menu responses automatically update
 
-**Update Email (Line 109):**
-```javascript
-📧 Email: your@email.com
-```
-
-**Adjust Membership Pricing (Lines 43-67):**
-```javascript
-*Monthly Plan*
-₹2,000/month  // Change as needed
-```
+**What gets parsed:**
+- Timings section → Menu option "Gym Timings"
+- Membership Plans section → Menu option "Membership Plans"
+- Facilities section → Menu option "Facilities"  
+- Address, Contact, Email → Menu option "Location & Contact"
+- Owner name → Shown in staff connection
+- Trial information → Shown in trial booking
 
 ### Modify Handoff Messages
 In `services/handoff.js`:
