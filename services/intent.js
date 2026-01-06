@@ -1,13 +1,14 @@
 // Intent detection using keyword matching
 const INTENT_PATTERNS = {
-  timings: ['timing', 'time', 'open', 'close', 'hours', 'schedule', 'when'],
-  pricing: ['price', 'cost', 'fee', 'membership', 'plan', 'rate', 'charge', 'how much', 'monthly', 'yearly'],
-  trial: ['trial', 'demo', 'test', 'try', 'first day', 'visit'],
-  training: ['trainer', 'personal training', 'pt', 'coach'],
-  booking: ['book', 'appointment', 'reserve', 'schedule', 'join'],
-  location: ['location', 'address', 'where', 'directions', 'reach'],
-  rules: ['rule', 'dress', 'attire', 'towel', 'shoes', 'policy', 'bring'],
-  greeting: ['hi', 'hello', 'hey', 'good morning', 'good evening']
+  timings: ['timing', 'time', 'open', 'close', 'hours', 'schedule', 'when', 'holiday'],
+  pricing: ['price', 'cost', 'fee', 'membership', 'plan', 'rate', 'charge', 'how much', 'monthly', 'yearly', 'quarterly', 'package', 'what does it cover', 'what is included'],
+  trial: ['trial', 'demo', 'test', 'try', 'first day', 'visit', 'check out'],
+  training: ['trainer', 'personal training', 'pt', 'coach', 'one on one', '1-on-1', 'personalized', 'is pt included', 'does membership include training'],
+  booking: ['book', 'appointment', 'reserve', 'schedule', 'join', 'sign up', 'enroll'],
+  location: ['location', 'address', 'where', 'directions', 'reach', 'how to get', 'landmark', 'parking', 'contact', 'phone', 'email'],
+  rules: ['rule', 'dress', 'attire', 'towel', 'shoes', 'policy', 'bring', 'age limit', 'requirements', 'what to bring'],
+  greeting: ['hi', 'hello', 'hey', 'good morning', 'good evening', 'namaste', 'yo'],
+  services: ['services', 'classes', 'group class', 'yoga', 'zumba', 'steam', 'sauna', 'diet', 'nutrition', 'facilities', 'equipment', 'amenities']
 };
 
 function detectIntent(message) {

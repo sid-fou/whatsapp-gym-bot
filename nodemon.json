@@ -1,0 +1,6 @@
+{
+  "watch": ["*.js", "routes/**/*.js", "services/**/*.js", "database/**/*.js", "middleware/**/*.js", "config/**/*.js"],
+  "ignore": ["node_modules", "*.log", "*.md", "test.js"],
+  "ext": "js,json",
+  "delay": 2000
+}

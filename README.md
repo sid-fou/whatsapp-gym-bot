@@ -1,207 +1,499 @@
-# 🤖 WhatsApp Gym Chatbot - IronCore Fitness
+# 🤖 IronCore Fitness WhatsApp Bot - Backend API
 
-An intelligent WhatsApp chatbot that automates gym inquiries using AI-powered responses with strict guardrails. Built with Node.js, Express, and OpenRouter AI.
+Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, and comprehensive admin API for gym automation.
 
-![Demo](https://img.shields.io/badge/Status-Demo-blue)
-![Node](https://img.shields.io/badge/Node.js-v18+-green)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-green)
+![Node](https://img.shields.io/badge/Node.js-18+-green)
+![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-brightgreen)
 ![License](https://img.shields.io/badge/License-ISC-yellow)
+
+**Related Repository:** [Admin Dashboard](https://github.com/sid-fou/ironcore-admin-dashboard)
+
+---
 
 ## ✨ Features
 
-- 🎯 **Intent Detection**: Automatically classifies user queries (timings, pricing, trials, booking)
-- ⚡ **Fast FAQ Responses**: Instant replies for common questions
-- 🤖 **AI-Powered**: Uses Claude 3.5 via OpenRouter for complex queries
-- 🛡️ **Smart Guardrails**: Refuses to provide medical/fitness advice, stays on-topic
-- 📊 **Conversation Logging**: Tracks all interactions for analytics
-- 🔒 **Rate Limiting**: Prevents abuse
-- 📱 **WhatsApp Business API**: Official integration
+### 🤖 AI-Powered Chat
+- **Claude 3.5 Sonnet** integration for intelligent responses
+- **Context-aware conversations** (last 10 messages stored)
+- **Intent detection** (greetings, questions, bookings, pricing)
+- **Gym knowledge base** integration
+- **Guardrails** - Stays on-topic, no medical advice
 
-## 🎬 Demo Conversation
+### 🤝 Staff Handoff System
+- **Smart handoff detection** (3-layer: keywords + AI + booking)
+- **Staff notifications** (WhatsApp + Email)
+- **Auto-assignment** (first to respond gets assigned)
+- **Direct messaging** (staff replies auto-forward to customer)
+- **Owner escalation** (5-minute timer if unaccepted)
+- **Goodbye message** when handoff ends
+- **10-minute cooldown** prevents re-triggers
+
+### 👥 Staff Management
+- **CRUD operations** for staff members
+- **Role-based system** (Owner, Trainer, Staff)
+- **Notification preferences** per staff
+- **Protected owner** (cannot delete via UI)
+- **MongoDB staff database**
+
+### 💬 Customer Management
+- **Conversation history** (full chat logs)
+- **Customer database** (auto-created)
+- **Message tracking** (counts, timestamps)
+- **Context preservation** during handoffs
+
+### 🚫 Ignore List (Spam Prevention)
+- **Block numbers** by reason (spam, personal, manual)
+- **MongoDB persistence**
+- **Statistics** by reason
+- **Silent mode** (no bot responses)
+
+### 🔌 Admin API
+- **24+ REST endpoints** for dashboard
+- **Secure authentication** (admin key)
+- **Bot control** (enable/disable remotely)
+- **Statistics** (conversations, handoffs, staff, ignored)
+- **Full CRUD** for all resources
+
+---
+
+## 🚀 Tech Stack
+
+- **Runtime:** Node.js 18+ with Express.js
+- **Database:** MongoDB Atlas (cloud)
+- **AI:** Anthropic Claude API
+- **Messaging:** WhatsApp Business API (Meta)
+- **Email:** Nodemailer with Gmail SMTP
+- **Architecture:** RESTful API + Microservices
+
+---
+
+## 📁 Project Structure
 
 ```
-User: Hi
-Bot: Hello! Welcome to IronCore Fitness. How can I assist you today?
-
-User: What are your timings on weekend?
-Bot: We're open Mon–Sat: 6 AM – 10 PM, and Sunday: 8 AM – 2 PM.
-
-User: Can you give me workout tips?
-Bot: I apologize, but I cannot provide workout advice. 
-     For personalized guidance, book a session with our trainers.
-```
-
-## 🏗️ Project Structure
-
-```
-whatsapp-gym-bot/
-├── server.js              # Express server with rate limiting
+whatsapp-chatbot-backend/
+├── server.js                      # Express server + MongoDB connection
 ├── routes/
-│   └── webhook.js        # WhatsApp webhook handlers
+│   ├── webhook.js                 # WhatsApp webhook handlers (main logic)
+│   └── admin/
+│       ├── auth.js                # Admin authentication routes
+│       └── api.js                 # Admin API endpoints (24+)
 ├── services/
-│   ├── ai.js            # OpenRouter AI integration
-│   ├── intent.js        # Intent detection engine
-│   ├── faq.js           # Pre-defined responses
-│   └── booking.js       # Booking logic
+│   ├── ai.js                      # Claude API integration
+│   ├── handoff.js                 # Handoff detection & queue management
+│   ├── staff-management.js        # Staff CRUD operations
+│   ├── context.js                 # MongoDB context management
+│   ├── ignore-list.js             # Blocked numbers database
+│   ├── bot-state.js               # Global bot enable/disable
+│   ├── escalation.js              # Owner escalation (5-min timer)
+│   ├── buttons.js                 # WhatsApp interactive buttons
+│   └── notifications/
+│       ├── email.js               # Email notifications
+│       └── whatsapp.js            # WhatsApp notifications
+├── database/
+│   ├── connection.js              # MongoDB connection + auto-reconnect
+│   └── models/
+│       ├── Context.js             # Conversation history model
+│       ├── Handoff.js             # Handoff queue model
+│       ├── Staff.js               # Staff members model
+│       └── IgnoreList.js          # Blocked numbers model
+├── middleware/
+│   └── auth.js                    # Admin key verification
 ├── config/
-│   └── environment.js   # Environment validation
+│   └── environment.js             # Environment validation
 ├── data/
-│   └── gym_knowledge.txt # Knowledge base
-├── logs/
-│   ├── conversations.js  # Logging module
-│   └── conversation_data.json # Logged data
-└── test.js              # Local testing script
+│   └── gym_knowledge.txt          # AI training data (gym info)
+├── docs/
+│   ├── API-DOCUMENTATION.md       # Complete API reference
+│   ├── HANDOFF-SYSTEM.md          # Handoff system guide
+│   └── STAFF-COMMANDS.md          # Staff WhatsApp commands
+├── scripts/
+│   └── ... (utility scripts)
+├── test-*.js                      # Test suites
+├── .env.example                   # Environment template
+├── .gitignore
+└── package.json
 ```
 
-## 🚀 Quick Start
+---
+
+## 🚀 Installation
 
 ### Prerequisites
+- Node.js 18+
+- MongoDB Atlas account
+- WhatsApp Business API access
+- Anthropic API key
+- Gmail account (for email notifications)
 
-- Node.js v18+ 
-- WhatsApp Business Account
-- OpenRouter API Key
-
-### Installation
-
+### Step 1: Clone Repository
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/whatsapp-gym-bot.git
-cd whatsapp-gym-bot
+git clone https://github.com/sid-fou/whatsapp-bot-backend.git
+cd whatsapp-bot-backend
+```
 
-# Install dependencies
+### Step 2: Install Dependencies
+```bash
 npm install
+```
 
-# Configure environment
+### Step 3: Configure Environment
+
+Create `.env` file:
+```bash
 cp .env.example .env
-# Edit .env with your credentials
+```
 
-# Run tests
-npm test
+Edit `.env` with your credentials:
+```env
+# Server
+PORT=3000
 
-# Start server
+# WhatsApp Business API
+WHATSAPP_TOKEN=your_meta_access_token
+PHONE_NUMBER_ID=your_whatsapp_business_id
+VERIFY_TOKEN=your_webhook_verify_token
+
+# AI Service
+ANTHROPIC_API_KEY=your_claude_api_key
+
+# Database
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dbname
+
+# Admin Dashboard
+ADMIN_KEY=ironcore_admin_2025_secure
+DASHBOARD_URL=http://localhost:3001
+
+# Email Notifications
+EMAIL_USER=your_gmail@gmail.com
+EMAIL_PASS=your_gmail_app_password
+OWNER_EMAIL=owner@gym.com
+
+# Staff Notifications (comma-separated)
+STAFF_WHATSAPP_NUMBERS=918755052568,918755225619
+STAFF_EMAILS=staff1@gmail.com,staff2@gmail.com
+```
+
+### Step 4: Run Tests
+```bash
+# Test MongoDB connection
+node check-mongodb.js
+
+# Test full system
+node test-full-system.js
+
+# Test admin API
+node test-admin-api.js
+```
+
+### Step 5: Start Server
+```bash
+# Development (with auto-reload)
+npm run dev
+
+# Production
 npm start
 ```
 
-### Environment Variables
+Server runs on: `http://localhost:3000`
 
-```env
-PORT=3000
-WHATSAPP_TOKEN=your_whatsapp_token
-PHONE_NUMBER_ID=your_phone_number_id
-VERIFY_TOKEN=your_custom_verify_token
-OPENROUTER_API_KEY=your_openrouter_key
-```
+---
+
+## 🔌 API Endpoints
+
+### Authentication (3)
+- `POST /admin/login` - Login with admin key
+- `GET /admin/verify` - Verify admin key
+- `POST /admin/logout` - Logout
+
+### Bot Control (3)
+- `GET /admin/api/bot/status` - Get bot status
+- `POST /admin/api/bot/enable` - Turn bot ON
+- `POST /admin/api/bot/disable` - Turn bot OFF
+
+### Statistics (1)
+- `GET /admin/api/stats` - Get dashboard stats (includes staff count)
+
+### Conversations (2)
+- `GET /admin/api/conversations` - Get recent conversations
+- `GET /admin/api/conversations/:userId` - Get specific conversation
+
+### Customers (2)
+- `GET /admin/api/customers` - Get all customers
+- `GET /admin/api/customers/:userId` - Get customer details
+
+### Staff Management (4)
+- `GET /admin/api/staff` - Get all staff
+- `POST /admin/api/staff` - Add staff member
+- `PUT /admin/api/staff/:id` - Update staff member
+- `DELETE /admin/api/staff/:id` - Delete staff member
+
+### Handoffs (4)
+- `GET /admin/api/handoffs` - Get handoff queue
+- `POST /admin/api/handoffs/:userId/end` - End handoff
+- `DELETE /admin/api/handoffs/:phoneNumber` - Remove handoff
+- `POST /admin/api/handoffs/clear` - Clear all handoffs
+
+### Ignore List (3)
+- `GET /admin/api/ignored` - Get all ignored numbers
+- `POST /admin/api/ignore` - Add to ignore list
+- `DELETE /admin/api/ignore/:phoneNumber` - Remove from ignore list
+
+**Total: 24 API Endpoints**
+
+See [API-DOCUMENTATION.md](docs/API-DOCUMENTATION.md) for complete reference.
+
+---
 
 ## 📝 Getting API Keys
 
-### WhatsApp Business API
-
-1. Create account at [Meta for Developers](https://developers.facebook.com)
-2. Create new app → Add WhatsApp product
+### 1. WhatsApp Business API
+1. Go to [Meta for Developers](https://developers.facebook.com)
+2. Create app → Add WhatsApp product
 3. Get Phone Number ID and Access Token
-4. Configure webhook URL
+4. Configure webhook URL (when deploying)
 
-### OpenRouter API
-
-1. Sign up at [OpenRouter](https://openrouter.ai)
+### 2. Anthropic Claude API
+1. Sign up at [Anthropic](https://console.anthropic.com)
 2. Create API key
-3. Add credits (starts with free tier)
+3. Add credits to account
+
+### 3. MongoDB Atlas
+1. Create account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Create cluster (free tier available)
+3. Get connection string
+4. Whitelist IP addresses (or allow all: 0.0.0.0/0)
+
+### 4. Gmail App Password
+1. Enable 2FA on Gmail account
+2. Go to [App Passwords](https://myaccount.google.com/apppasswords)
+3. Generate password for "Mail"
+4. Use this in EMAIL_PASS
+
+---
 
 ## 🧪 Testing
 
-### Local Testing (No WhatsApp Required)
-
+### Local Testing
 ```bash
-node test.js
+# Test all systems
+npm test
+
+# Test specific modules
+node test-context.js         # MongoDB context
+node test-ignore-list.js     # Ignore list
+node test-admin-api.js       # Admin API
 ```
 
-### Live Testing with WhatsApp
+### Webhook Testing with ngrok
+```bash
+# Terminal 1: Start server
+npm start
 
-1. Install [ngrok](https://ngrok.com/download)
-2. Start your server: `npm start`
-3. In new terminal: `ngrok http 3000`
-4. Configure webhook in Meta Dashboard with ngrok URL
-5. Send messages to your WhatsApp test number
+# Terminal 2: Start ngrok
+ngrok http 3000
+
+# Use ngrok URL in Meta webhook settings
+```
+
+---
 
 ## 🎨 Customization
 
 ### Update Gym Information
-
 Edit `data/gym_knowledge.txt`:
-
 ```
-Gym Name: Your Gym Name
-Timings: Your hours
-Membership Plans: Your pricing
+Gym Name: IronCore Fitness
+Location: Mumbai, India
+Timings: Mon-Sat 6 AM - 11 PM, Sunday 7 AM - 9 PM
+Membership: ₹999/month, ₹9999/year
+Contact: +91-XXX-XXX-XXXX
 ```
 
-### Change AI Model
-
-In `services/ai.js`, modify:
-
+### Modify Handoff Messages
+In `services/handoff.js`:
 ```javascript
-model: 'anthropic/claude-3.5-sonnet'  // Premium
-model: 'anthropic/claude-3-haiku'     // Balanced
-model: 'meta-llama/llama-3.1-8b-instruct' // Budget
+const handoffMessage = `Your custom message...`;
 ```
 
-### Add More Intents
-
-In `services/intent.js`:
-
+In `routes/webhook.js` (goodbye message):
 ```javascript
-const INTENT_PATTERNS = {
-  new_intent: ['keyword1', 'keyword2'],
-  // ...
-};
+const goodbyeMessage = `Your custom goodbye...`;
 ```
+
+### Change Escalation Time
+In `services/escalation.js`:
+```javascript
+const ESCALATION_TIME_MS = 5 * 60 * 1000; // 5 minutes
+```
+
+### Add New Staff Commands
+In `services/buttons.js` - Add button handlers
+In `routes/webhook.js` - Add text command detection
+
+---
 
 ## 🛡️ Security Features
 
-- ✅ Environment variable validation
-- ✅ Rate limiting (100 req/15min per IP)
-- ✅ Input sanitization
-- ✅ Error handling
-- ✅ No sensitive data in logs
-- ✅ `.env` files excluded from Git
+- ✅ Environment variables for all secrets
+- ✅ Admin key authentication
+- ✅ MongoDB connection encryption
+- ✅ Rate limiting (built-in Express)
+- ✅ Input validation
+- ✅ Error handling (no sensitive data leaked)
+- ✅ CORS configured for dashboard
+- ✅ No secrets in Git (.gitignore)
 
-## 📊 Analytics
+---
 
-Conversation logs stored in `logs/conversation_data.json`:
+## 📊 Database Collections
 
-```json
+### contexts
+```javascript
 {
-  "userId": "919876543210",
-  "userMessage": "What are your timings?",
-  "botResponse": "We're open Mon–Sat...",
-  "timestamp": "2025-12-29T04:10:00.000Z"
+  userId: String,              // WhatsApp number
+  messages: [{
+    role: String,              // 'user' | 'assistant'
+    content: String,
+    timestamp: Number
+  }],
+  metadata: {
+    lastActivity: Number,
+    inHandoff: Boolean,
+    handoffReason: String,
+    firstGreeting: Boolean
+  }
 }
 ```
 
-## 🤝 Contributing
+### handoffs
+```javascript
+{
+  userId: String,              // Customer number
+  customerName: String,
+  message: String,             // Trigger message
+  reason: String,              // Handoff reason
+  status: String,              // 'waiting' | 'active' | 'resolved'
+  timestamp: Date,
+  staffMember: String,         // Assigned staff number
+  assignedAt: Date
+}
+```
 
-Contributions welcome! Please:
+### staffs
+```javascript
+{
+  name: String,
+  role: String,                // 'owner' | 'trainer' | 'staff'
+  phoneNumber: String,
+  email: String,
+  specialization: String,
+  receiveNotifications: Boolean,
+  isActive: Boolean,
+  createdAt: Date,
+  updatedAt: Date
+}
+```
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open Pull Request
+### ignorelists
+```javascript
+{
+  phoneNumber: String,
+  reason: String,              // 'spam' | 'personal' | 'manual' | 'other'
+  addedBy: String,
+  note: String,
+  addedAt: Date,
+  lastMessageReceived: Date
+}
+```
+
+---
+
+## 🚀 Deployment
+
+### Deploy to Render
+1. Push code to GitHub
+2. Create new Web Service on Render
+3. Connect GitHub repo
+4. Configure:
+   - Build: `npm install`
+   - Start: `npm start`
+   - Environment: Add all .env variables
+5. Deploy!
+
+### Configure Webhook
+After deployment:
+1. Get Render URL: `https://your-app.onrender.com`
+2. Go to Meta Developer Dashboard
+3. Configure webhook: `https://your-app.onrender.com/webhook`
+4. Set verify token (from .env)
+5. Subscribe to messages
+
+See detailed deployment guide in repository.
+
+---
+
+## 📚 Documentation
+
+- [API Documentation](docs/API-DOCUMENTATION.md) - Complete API reference
+- [Handoff System](docs/HANDOFF-SYSTEM.md) - How staff handoffs work
+- [Staff Commands](docs/STAFF-COMMANDS.md) - WhatsApp commands for staff
+
+---
+
+## 🐛 Troubleshooting
+
+### MongoDB Connection Issues
+- Check MONGODB_URI format
+- Whitelist IP address (0.0.0.0/0 for public access)
+- Verify cluster is running
+- Check network access settings
+
+### WhatsApp Not Responding
+- Verify WHATSAPP_TOKEN is valid
+- Check PHONE_NUMBER_ID is correct
+- Ensure webhook is configured
+- Check server logs for errors
+
+### Staff Not Receiving Notifications
+- Verify STAFF_WHATSAPP_NUMBERS format
+- Check STAFF_EMAILS configuration
+- Test email settings (EMAIL_USER, EMAIL_PASS)
+- Verify staff members in database
+
+### API Errors
+- Check ADMIN_KEY matches
+- Verify MongoDB connection
+- Check server logs
+- Test endpoints with curl/Postman
+
+---
 
 ## 📄 License
 
-ISC License - see LICENSE file
+ISC License
+
+---
+
+## 👥 Authors
+
+Built for IronCore Fitness automation.
+
+---
 
 ## 🙏 Acknowledgments
 
-- [OpenRouter](https://openrouter.ai) - AI API gateway
-- [Meta WhatsApp Business API](https://developers.facebook.com/docs/whatsapp)
-- [Express.js](https://expressjs.com)
+- [Anthropic](https://anthropic.com) - Claude AI
+- [Meta](https://developers.facebook.com) - WhatsApp Business API
+- [MongoDB](https://mongodb.com) - Database
+- [Express.js](https://expressjs.com) - Web framework
+- [Nodemailer](https://nodemailer.com) - Email service
 
-## 📧 Contact
+---
 
-Your Name - [@yourtwitter](https://twitter.com/yourtwitter)
-
-Project Link: [https://github.com/yourusername/whatsapp-gym-bot](https://github.com/yourusername/whatsapp-gym-bot)
+**Version:** 2.0.0  
+**Last Updated:** January 2026  
+**Status:** Production Ready ✅
 
 ---
 

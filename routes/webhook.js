@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const intentService = require('../services/intent');
 const aiService = require('../services/ai');
+const handoffService = require('../services/handoff');
+const contextService = require('../services/context');
+const buttonService = require('../services/buttons');
+const staffHelper = require('../services/staff-helper');
+const botState = require('../services/bot-state');
+const ignoreListService = require('../services/ignore-list');
 const { logConversation } = require('../logs/conversations');
 
 // WhatsApp webhook verification
@@ -27,11 +33,6 @@ router.post('/', async (req, res) => {
   try {
     const body = req.body;
 
-    // Log incoming webhook (for debugging)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('📥 Webhook received:', JSON.stringify(body, null, 2));
-    }
-
     if (body.object === 'whatsapp_business_account') {
       const entry = body.entry[0];
       const changes = entry.changes[0];
@@ -41,59 +42,467 @@ router.post('/', async (req, res) => {
       if (value.messages && value.messages.length > 0) {
         const message = value.messages[0];
         const from = message.from;
-        const messageId = message.id;
         const text = message.text?.body;
+        const interactive = message.interactive;
+        
+        // Extract contact name from WhatsApp profile (push name)
+        const contactName = value.contacts?.[0]?.profile?.name || null;
 
+        // Handle button clicks
+        if (interactive) {
+          await handleButtonClick(from, interactive);
+          return;
+        }
+
+        // Handle text messages
         if (text) {
           console.log(`\n📱 Message from ${from}: "${text}"`);
-          
-          // Process the message
-          const response = await processMessage(text, from);
-          
-          // Send reply via WhatsApp API
-          await sendWhatsAppMessage(from, response);
-          
-          console.log(`✅ Reply sent: "${response.substring(0, 50)}..."`);
+          if (contactName) {
+            console.log(`👤 Contact name: ${contactName}`);
+          }
+          await handleTextMessage(from, text, contactName);
         }
-      }
-      
-      // Handle message status updates (optional)
-      if (value.statuses) {
-        console.log('📊 Status update received');
       }
     }
   } catch (error) {
     console.error('❌ Webhook error:', error.message);
-    // Don't throw - we already sent 200 to WhatsApp
+    console.error('Stack:', error.stack);
   }
 });
 
-async function processMessage(text, userId) {
-  try {
-    // Detect intent
-    const intent = intentService.detectIntent(text);
-    console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
+// Handle button clicks
+async function handleButtonClick(staffId, interactive) {
+  const buttonData = buttonService.parseButtonClick(interactive);
+  
+  if (!buttonData) {
+    console.log('⚠️  Unknown button click');
+    return;
+  }
+
+  console.log(`🔘 Button clicked: ${buttonData.type}`);
+
+  if (buttonData.type === 'end_handoff') {
+    // End handoff for customer
+    const customerId = buttonData.customerId;
     
-    // Get AI response based on intent
-    const response = await aiService.generateResponse(text, intent);
+    // CRITICAL: Check if handoff still exists and is active
+    const handoffDetails = await handoffService.getHandoffDetails(customerId);
     
-    // Log conversation
-    logConversation(userId, text, response);
+    if (!handoffDetails) {
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `❌ This handoff no longer exists. It may have been closed already.` }
+      });
+      console.log(`⚠️  Staff tried to end non-existent handoff for ${customerId}`);
+      return;
+    }
     
-    return response;
-  } catch (error) {
-    console.error('❌ Error processing message:', error.message);
-    return "Sorry, I'm having trouble right now. A staff member will get back to you soon.";
+    if (handoffDetails.status === 'resolved') {
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `❌ This handoff was already closed. Customer is now being handled by the bot.` }
+      });
+      console.log(`⚠️  Staff tried to end already resolved handoff for ${customerId}`);
+      return;
+    }
+    
+    // Check if this staff member is the one assigned (if handoff is assigned)
+    if (handoffDetails.staffMember && handoffDetails.staffMember !== staffId) {
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `⚠️ This handoff is assigned to ${handoffDetails.staffMember}. Only they can end it.\n\nIf needed, you can end it from the dashboard.` }
+      });
+      console.log(`⚠️  Staff ${staffId} tried to end handoff assigned to ${handoffDetails.staffMember}`);
+      return;
+    }
+    
+    // All checks passed - end the handoff
+    await handoffService.endHandoff(customerId);
+    await contextService.setHandoffStatus(customerId, false);
+    
+    // Send goodbye message to customer
+    const goodbyeMessage = `Thank you for contacting IronCore Fitness! 💪
+
+Our automated assistant is now back online to help you. Feel free to reach out anytime!
+
+Stay strong! 🏋️‍♂️`;
+    
+    await sendWhatsAppMessage(customerId, {
+      text: { body: goodbyeMessage }
+    });
+    
+    // Save goodbye message to context
+    await contextService.addMessage(customerId, 'assistant', goodbyeMessage);
+    
+    await sendWhatsAppMessage(staffId, {
+      text: { body: `✅ Handoff ended for ${customerId}\nBot is now active for this customer.` }
+    });
+    
+  } else if (buttonData.type === 'assign') {
+    // Assign handoff to this staff member
+    const customerId = buttonData.customerId;
+    
+    // CRITICAL: Check if handoff still exists and is not resolved
+    const handoffDetails = await handoffService.getHandoffDetails(customerId);
+    
+    if (!handoffDetails) {
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `❌ This handoff no longer exists. It may have been closed already.` }
+      });
+      console.log(`⚠️  Staff tried to assign closed handoff for ${customerId}`);
+      return;
+    }
+    
+    if (handoffDetails.status === 'resolved') {
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `❌ This handoff was already closed. Customer is now being handled by the bot.` }
+      });
+      console.log(`⚠️  Staff tried to assign resolved handoff for ${customerId}`);
+      return;
+    }
+    
+    if (handoffDetails.staffMember && handoffDetails.staffMember !== staffId) {
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `❌ This handoff is already assigned to ${handoffDetails.staffMember}.` }
+      });
+      console.log(`⚠️  Staff ${staffId} tried to assign handoff already assigned to ${handoffDetails.staffMember}`);
+      return;
+    }
+    
+    // All checks passed - assign the handoff
+    await handoffService.assignToStaff(customerId, staffId);
+    
+    // Send confirmation with end handoff button
+    const endButton = buttonService.createEndHandoffButton(customerId);
+    await sendWhatsAppMessage(staffId, endButton);
+    
+    console.log(`👤 Handoff for ${customerId} assigned to staff ${staffId} via button`);
+    
+  } else if (buttonData.type === 'bot_on') {
+    botState.enableBot();
+    const response = buttonService.createBotOffButton();
+    await sendWhatsAppMessage(staffId, response);
+    
+  } else if (buttonData.type === 'bot_off') {
+    botState.disableBot();
+    const response = buttonService.createBotOnButton();
+    await sendWhatsAppMessage(staffId, response);
   }
 }
 
-async function sendWhatsAppMessage(to, message) {
-  const url = `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`;
+// Handle text messages
+async function handleTextMessage(from, text, contactName = null) {
+  // Check if message is from staff
+  const isStaff = await staffHelper.isStaffMessage(from);
+
+  if (isStaff) {
+    await handleStaffMessage(from, text);
+    return;
+  }
+
+  // CRITICAL: Check if number is in ignore list
+  const isIgnored = await ignoreListService.isIgnored(from);
+  if (isIgnored) {
+    console.log(`🚫 Number ${from} is in ignore list - No response`);
+    return; // Stay silent for ignored numbers
+  }
+
+  // Customer message - process normally
+  await handleCustomerMessage(from, text, contactName);
+}
+
+// Handle staff messages
+async function handleStaffMessage(staffId, text) {
+  console.log('👤 Message from staff');
+
+  // Check for bot control commands
+  const botCommand = staffHelper.detectBotCommand(text);
+  if (botCommand) {
+    const response = staffHelper.handleBotControl(botCommand);
+    if (response) {
+      await sendWhatsAppMessage(staffId, response);
+    }
+    return;
+  }
+
+  // Check for staff commands (end handoff, reply to customer)
+  const staffCommand = staffHelper.parseStaffCommand(text);
+  if (staffCommand) {
+    if (staffCommand.type === 'end_handoff') {
+      const customerId = staffCommand.customerId;
+      await handoffService.endHandoff(customerId);
+      await contextService.setHandoffStatus(customerId, false);
+      
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `✅ Handoff ended for ${customerId}\nBot is now active for this customer.` }
+      });
+      return;
+    }
+    
+    if (staffCommand.type === 'reply_to_customer') {
+      const customerId = staffCommand.customerId;
+      const message = staffCommand.message;
+      
+      // Assign handoff to this staff member
+      await handoffService.assignToStaff(customerId, staffId);
+      
+      // Send message to customer
+      await sendWhatsAppMessage(customerId, {
+        text: { body: `${message}\n\n_Message from staff_` }
+      });
+      
+      // Confirm to staff
+      await sendWhatsAppMessage(staffId, {
+        text: { body: `✅ Message sent to ${customerId}` }
+      });
+      return;
+    }
+  }
+
+  // Get users in handoff for acknowledgment and auto-forward checks
+  const usersInHandoff = await contextService.getUsersInHandoff();
+
+  // Check if it's an acknowledgment after notification (MUST CHECK BEFORE AUTO-FORWARD)
+  // BUT ONLY if staff is NOT already assigned to a customer
+  let assignedCustomer = null;
+  for (const user of usersInHandoff) {
+    const isAssigned = await handoffService.isAssignedToStaff(user.userId, staffId);
+    if (isAssigned) {
+      assignedCustomer = user.userId;
+      break;
+    }
+  }
   
+  // Only treat as acknowledgment if staff is NOT already assigned
+  if (staffHelper.isAcknowledgment(text) && !assignedCustomer) {
+    if (usersInHandoff.length > 0) {
+      // Assume acknowledging the most recent handoff
+      const customerId = usersInHandoff[0].userId;
+      
+      // Assign this handoff to the staff member
+      await handoffService.assignToStaff(customerId, staffId);
+      
+      // Send acknowledgment button ONCE
+      const buttonPayload = buttonService.createEndHandoffButton(customerId);
+      
+      if (buttonPayload) {
+        await sendWhatsAppMessage(staffId, buttonPayload);
+      }
+    }
+    return;
+  }
+
+  // Check if staff is replying without using command format
+  // This allows staff to just reply normally and bot will forward to last customer they interacted with
+  
+  // If staff has an assigned customer, forward the message
+  if (assignedCustomer) {
+    await sendWhatsAppMessage(assignedCustomer, {
+      text: { body: text }
+    });
+    
+    // IMPORTANT: Save staff message to customer's context
+    await contextService.addMessage(assignedCustomer, 'assistant', text);
+    
+    // Don't send button after staff messages - only customer messages will have buttons
+    console.log(`📨 Forwarded message from staff ${staffId} to customer ${assignedCustomer}`);
+    return;
+  }
+
+  // Other staff messages - don't respond (they're handling customers manually)
+  console.log('⏭️  Staff message - no bot response');
+}
+
+// Handle customer messages
+async function handleCustomerMessage(userId, text, contactName = null) {
+  try {
+    // Check if bot is globally disabled
+    if (!botState.isBotEnabled()) {
+      console.log('🤖 Bot is OFF - No response');
+      return;
+    }
+
+    // Check if user is in handoff mode
+    const inHandoff = await contextService.isInHandoff(userId);
+    if (inHandoff) {
+      console.log(`⏸️  User ${userId} in handoff - Bot paused`);
+      
+      // IMPORTANT: Save customer message to context even during handoff
+      await contextService.addMessage(userId, 'user', text);
+      
+      // Forward customer message to assigned staff member
+      const handoffDetails = await handoffService.getHandoffDetails(userId);
+      if (handoffDetails && handoffDetails.staffMember) {
+        // Use stored customer name or WhatsApp profile name
+        const displayName = handoffDetails.customerName || contactName || userId;
+        
+        // Send customer message with End Handoff button
+        await sendWhatsAppMessage(handoffDetails.staffMember, {
+          type: 'interactive',
+          interactive: {
+            type: 'button',
+            body: {
+              text: `📱 Message from ${displayName}:\n\n"${text}"`
+            },
+            action: {
+              buttons: [
+                {
+                  type: 'reply',
+                  reply: {
+                    id: `end_handoff_${userId}`,
+                    title: '✅ End Handoff'
+                  }
+                }
+              ]
+            }
+          }
+        });
+        console.log(`📨 Forwarded customer message to staff ${handoffDetails.staffMember}`);
+      } else {
+        // No staff assigned yet, send to all staff as notification
+        const staffNumbers = process.env.STAFF_WHATSAPP_NUMBERS?.split(',') || [];
+        for (const staffNum of staffNumbers) {
+          await sendWhatsAppMessage(staffNum.trim(), {
+            text: { 
+              body: `📱 Message from customer ${userId} (in handoff):\n\n"${text}"\n\n_Type "ok" to take this handoff_` 
+            }
+          });
+        }
+        console.log(`📨 Broadcasted customer message to all staff (no assignment yet)`);
+      }
+      
+      return;
+    }
+
+    // Check if user is requesting a specific staff member FIRST
+    const requestedStaff = await handoffService.detectRequestedStaffFromMessage(text);
+    const isSpecificStaffRequest = !!requestedStaff;
+    
+    if (isSpecificStaffRequest) {
+      console.log(`🎯 Specific staff requested: ${requestedStaff.name}`);
+    }
+    
+    // Check if handoff should be triggered (with AI detection)
+    const handoffCheck = await handoffService.shouldTriggerHandoffWithAI(text);
+    console.log(`🔍 Handoff check: shouldHandoff=${handoffCheck.shouldHandoff}, reason=${handoffCheck.reason}`);
+    
+    // If specific staff requested, force handoff trigger
+    if (isSpecificStaffRequest && !handoffCheck.shouldHandoff) {
+      console.log(`✅ Forcing handoff - Specific staff detected`);
+      handoffCheck.shouldHandoff = true;
+      handoffCheck.reason = 'user_requested';
+    }
+    
+    // Check if it's a booking request - provide info FIRST
+    const isBookingRequest = text.toLowerCase().match(/book|timing|schedule|reserve|appointment/i);
+    if (handoffCheck.shouldHandoff && isBookingRequest) {
+      // Provide timing info THEN trigger handoff
+      const timingInfo = `📅 Our gym is open:
+Monday-Saturday: 6:00 AM - 11:00 PM
+Sunday: 7:00 AM - 9:00 PM
+
+For trial bookings and membership details, our team will assist you personally. Connecting you with staff now...`;
+      
+      await sendWhatsAppMessage(userId, { text: { body: timingInfo } });
+      await contextService.addMessage(userId, 'user', text);
+      await contextService.addMessage(userId, 'assistant', timingInfo);
+      
+      // Small delay so messages don't arrive simultaneously
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+    
+    // Check if user is in cooldown period (prevents re-triggering right after handoff ends)
+    const inCooldown = await contextService.isInHandoffCooldown(userId, 10); // 10 minute cooldown
+    if (inCooldown) {
+      console.log(`⏰ User in handoff cooldown period`);
+    }
+    
+    // ALWAYS allow explicit staff requests AND specific staff requests, even during cooldown
+    if (handoffCheck.shouldHandoff) {
+      const bypassCooldown = handoffCheck.reason === 'user_requested' || isSpecificStaffRequest;
+      
+      if (inCooldown && !bypassCooldown) {
+        console.log(`⏸️  Handoff trigger blocked - User in cooldown (reason: ${handoffCheck.reason})`);
+        // Continue with normal bot response instead
+      } else {
+        if (isSpecificStaffRequest) {
+          console.log(`✅ Bypassing cooldown - Specific staff request`);
+        }
+        console.log(`🚨 Handoff triggered - Reason: ${handoffCheck.reason}`);
+        
+        // IMPORTANT: Save the handoff trigger message to context
+        await contextService.addMessage(userId, 'user', text);
+        
+        await handoffService.addToHandoffQueue(userId, text, handoffCheck.reason, contactName);
+        await contextService.setHandoffStatus(userId, true, handoffCheck.reason);
+        
+        const handoffMessage = handoffService.getHandoffMessage(handoffCheck.reason);
+        await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
+        
+        // Save handoff response message to context
+        await contextService.addMessage(userId, 'assistant', handoffMessage);
+        
+        logConversation(userId, text, handoffMessage);
+        return; // Exit here - don't continue to AI response
+      }
+    }
+
+    // Detect intent
+    const intent = intentService.detectIntent(text);
+    console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
+
+    // Get AI response with context
+    const response = await aiService.generateResponse(text, intent, userId);
+
+    // Check if AI detected handoff need
+    if (response === null) {
+      // Don't trigger handoff for simple acknowledgments or if in cooldown
+      const simpleMessages = ['ok', 'okay', 'k', 'yes', 'no', 'thanks', 'thank you', 'bye'];
+      const isSimpleMessage = simpleMessages.includes(text.toLowerCase().trim());
+      
+      // IMPORTANT: Check if we already processed this as a specific staff request above
+      if (isSpecificStaffRequest) {
+        console.log(`⏭️  Skipping AI handoff - already handled as specific staff request`);
+        return;
+      }
+      
+      if (isSimpleMessage || inCooldown) {
+        console.log(`⏸️  AI handoff blocked - ${isSimpleMessage ? 'Simple message' : 'Cooldown period'}`);
+        // Send a simple acknowledgment instead
+        const simpleResponse = "Got it! If you need anything else, just let me know.";
+        await sendWhatsAppMessage(userId, { text: { body: simpleResponse } });
+        logConversation(userId, text, simpleResponse);
+        return;
+      }
+      
+      console.log(`🚨 Handoff triggered by AI`);
+      await handoffService.addToHandoffQueue(userId, text, 'ai_detected', contactName);
+      await contextService.setHandoffStatus(userId, true, 'ai_detected');
+      
+      const handoffMessage = handoffService.getHandoffMessage('ai_detected');
+      await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
+      logConversation(userId, text, handoffMessage);
+      return;
+    }
+
+    // Send response
+    await sendWhatsAppMessage(userId, { text: { body: response } });
+    logConversation(userId, text, response);
+    console.log(`✅ Reply sent`);
+
+  } catch (error) {
+    console.error('❌ Error processing customer message:', error.message);
+    const fallbackMessage = "Sorry, I'm having trouble right now. Please call us at +91 8755052568.";
+    await sendWhatsAppMessage(userId, { text: { body: fallbackMessage } });
+  }
+}
+
+// Send WhatsApp message (supports text and interactive)
+async function sendWhatsAppMessage(to, payload) {
+  const url = `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`;
+
+  // Build complete payload
   const data = {
     messaging_product: 'whatsapp',
     to: to,
-    text: { body: message }
+    ...payload
   };
 
   try {
@@ -110,7 +519,7 @@ async function sendWhatsAppMessage(to, message) {
       const errorData = await response.json();
       throw new Error(`WhatsApp API error: ${JSON.stringify(errorData)}`);
     }
-    
+
     return await response.json();
   } catch (error) {
     console.error('❌ Error sending WhatsApp message:', error.message);

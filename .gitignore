@@ -4,6 +4,7 @@ package-lock.json
 
 # Environment variables (CRITICAL - NEVER COMMIT!)
 .env
+.env.example
 .env.local
 .env.*.local
 
@@ -28,3 +29,7 @@ Thumbs.db
 # ngrok
 ngrok.exe
 ngrok.zip
+
+# Internal Documentation (not for GitHub)
+DEVELOPMENT-HISTORY.md
+docs/API-ADDITIONS.md
