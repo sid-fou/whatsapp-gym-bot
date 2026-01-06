@@ -522,14 +522,15 @@ router.post('/bot/disable', (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   try {
-    const contextStats = await contextService.getContextStats();
-    const ignoreStats = await ignoreListService.getIgnoreStats();
-    const usersInHandoff = await contextService.getUsersInHandoff();
-    
-    // Get staff count
+    // Get staff count first (most important)
     const staffManagement = require('../../services/staff-management');
     const allStaff = await staffManagement.getAllStaff();
     const activeStaff = allStaff.filter(s => s.isActive);
+    
+    // Get other stats
+    const contextStats = await contextService.getContextStats();
+    const ignoreStats = await ignoreListService.getIgnoreStats();
+    const usersInHandoff = await contextService.getUsersInHandoff();
     
     res.json({
       success: true,
@@ -562,10 +563,37 @@ router.get('/stats', async (req, res) => {
     });
   } catch (error) {
     console.error('Error getting stats:', error);
+    // Return default structure even on error
     res.status(500).json({
       success: false,
       error: 'Failed to retrieve statistics',
-      message: error.message
+      message: error.message,
+      data: {
+        bot: {
+          enabled: false,
+          status: 'offline'
+        },
+        conversations: {
+          total: 0,
+          recent: 0,
+          activeHandoffs: 0
+        },
+        ignored: {
+          total: 0,
+          byReason: {},
+          recentlyActive: 0
+        },
+        handoffs: {
+          active: 0,
+          users: []
+        },
+        staff: {
+          total: 0,
+          owners: 0,
+          trainers: 0,
+          staff: 0
+        }
+      }
     });
   }
 });
