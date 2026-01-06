@@ -14,7 +14,7 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 ## ✨ Features
 
 ### 🤖 AI-Powered Chat
-- **Claude 3.5 Sonnet** integration for intelligent responses
+- **Meta Llama 3.1 8B** via OpenRouter for intelligent responses
 - **Context-aware conversations** (last 10 messages stored)
 - **Intent detection** (greetings, questions, bookings, pricing)
 - **Gym knowledge base** integration
@@ -61,7 +61,7 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 
 - **Runtime:** Node.js 18+ with Express.js
 - **Database:** MongoDB Atlas (cloud)
-- **AI:** Anthropic Claude API
+- **AI:** Meta Llama 3.1 8B via OpenRouter
 - **Messaging:** WhatsApp Business API (Meta)
 - **Email:** Nodemailer with Gmail SMTP
 - **Architecture:** RESTful API + Microservices
@@ -151,7 +151,7 @@ PHONE_NUMBER_ID=your_whatsapp_business_id
 VERIFY_TOKEN=your_webhook_verify_token
 
 # AI Service
-ANTHROPIC_API_KEY=your_claude_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
 
 # Database
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/dbname
@@ -249,10 +249,11 @@ See [API-DOCUMENTATION.md](docs/API-DOCUMENTATION.md) for complete reference.
 3. Get Phone Number ID and Access Token
 4. Configure webhook URL (when deploying)
 
-### 2. Anthropic Claude API
-1. Sign up at [Anthropic](https://console.anthropic.com)
+### 2. OpenRouter API
+1. Sign up at [OpenRouter](https://openrouter.ai)
 2. Create API key
-3. Add credits to account
+3. Add credits to account (free tier available)
+4. Model used: `meta-llama/llama-3.1-8b-instruct`
 
 ### 3. MongoDB Atlas
 1. Create account at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
@@ -479,7 +480,8 @@ Built for IronCore Fitness automation.
 
 ## 🙏 Acknowledgments
 
-- [Anthropic](https://anthropic.com) - Claude AI
+- [OpenRouter](https://openrouter.ai) - AI API Gateway
+- [Meta AI](https://ai.meta.com) - Llama 3.1 Model
 - [Meta](https://developers.facebook.com) - WhatsApp Business API
 - [MongoDB](https://mongodb.com) - Database
 - [Express.js](https://expressjs.com) - Web framework
