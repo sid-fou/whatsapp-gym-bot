@@ -490,7 +490,7 @@ Built for IronCore Fitness automation.
 
 **Version:** 2.0.0  
 **Last Updated:** January 2026  
-**Status:** Production Ready ✅
+**Status:** Production Ready ✅  
 Siddharth Singh - [@sid](https://x.com/sid_fou)
 
 ---
