@@ -51,7 +51,7 @@ const contextSchema = new mongoose.Schema({
     },
     handoffReason: {
       type: String,
-      enum: ['user_requested', 'complex_query', 'ai_detected', null],
+      enum: ['user_requested', 'complex_query', 'ai_detected', 'booking', null],
       default: null
     },
     lastHandoffEndedAt: {

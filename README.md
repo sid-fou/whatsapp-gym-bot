@@ -13,6 +13,18 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 
 ## ✨ Features
 
+### 🎯 Interactive Welcome Menu (NEW!)
+- **First-time customer detection** - Automatically detects new users
+- **Interactive list menu** with 6 quick options:
+  - 🕐 Gym Timings - Operating hours
+  - 💳 Membership Plans - Pricing (₹999/month, quarterly, annual)
+  - 🏋️ Facilities - Equipment & amenities
+  - 📍 Location & Contact - Address & phone
+  - 🎯 Book Trial Session - Auto-triggers handoff
+  - 👤 Talk to Staff - Direct staff connection
+- **Context-aware** - Only shown on first message
+- **Auto-handoff** - Booking and staff requests trigger handoff automatically
+
 ### 🤖 AI-Powered Chat
 - **Meta Llama 3.1 8B** via OpenRouter for intelligent responses
 - **Context-aware conversations** (last 10 messages stored)
@@ -79,7 +91,7 @@ whatsapp-chatbot-backend/
 │       ├── auth.js                # Admin authentication routes
 │       └── api.js                 # Admin API endpoints (24+)
 ├── services/
-│   ├── ai.js                      # Claude API integration
+│   ├── ai.js                      # Meta Llama API integration
 │   ├── handoff.js                 # Handoff detection & queue management
 │   ├── staff-management.js        # Staff CRUD operations
 │   ├── context.js                 # MongoDB context management
@@ -87,6 +99,7 @@ whatsapp-chatbot-backend/
 │   ├── bot-state.js               # Global bot enable/disable
 │   ├── escalation.js              # Owner escalation (5-min timer)
 │   ├── buttons.js                 # WhatsApp interactive buttons
+│   ├── welcome-menu.js            # Interactive welcome menu (NEW!)
 │   └── notifications/
 │       ├── email.js               # Email notifications
 │       └── whatsapp.js            # WhatsApp notifications
@@ -307,6 +320,28 @@ Membership: ₹999/month, ₹9999/year
 Contact: +91-XXX-XXX-XXXX
 ```
 
+### Customize Welcome Menu
+Edit `services/welcome-menu.js`:
+
+**Update Location (Line 101):**
+```javascript
+*Address:*
+IronCore Fitness
+[Your Actual Address Here]
+Near [Your Landmark]
+```
+
+**Update Email (Line 109):**
+```javascript
+📧 Email: your@email.com
+```
+
+**Adjust Membership Pricing (Lines 43-67):**
+```javascript
+*Monthly Plan*
+₹999/month  // Change as needed
+```
+
 ### Modify Handoff Messages
 In `services/handoff.js`:
 ```javascript
@@ -490,7 +525,7 @@ Built for IronCore Fitness automation.
 
 **Version:** 2.0.0  
 **Last Updated:** January 2026  
-**Status:** Production Ready ✅
+**Status:** Production Ready ✅  
 Siddharth Singh - [@sid](https://x.com/sid_fou)
 
 ---

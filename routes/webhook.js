@@ -5,6 +5,7 @@ const aiService = require('../services/ai');
 const handoffService = require('../services/handoff');
 const contextService = require('../services/context');
 const buttonService = require('../services/buttons');
+const welcomeMenu = require('../services/welcome-menu');
 const staffHelper = require('../services/staff-helper');
 const botState = require('../services/bot-state');
 const ignoreListService = require('../services/ignore-list');
@@ -50,7 +51,7 @@ router.post('/', async (req, res) => {
 
         // Handle button clicks
         if (interactive) {
-          await handleButtonClick(from, interactive);
+          await handleButtonClick(from, interactive, contactName);
           return;
         }
 
@@ -63,6 +64,12 @@ router.post('/', async (req, res) => {
           await handleTextMessage(from, text, contactName);
         }
       }
+
+      // Handle status updates (message delivered, read, etc.)
+      if (value.statuses) {
+        // Optionally log status updates
+        // console.log('Status update received');
+      }
     }
   } catch (error) {
     console.error('❌ Webhook error:', error.message);
@@ -70,8 +77,17 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Handle button clicks
-async function handleButtonClick(staffId, interactive) {
+// Handle button/list clicks
+async function handleButtonClick(customerId, interactive, contactName = null) {
+  // Check if it's a menu selection
+  const menuSelection = welcomeMenu.parseMenuSelection(interactive);
+  if (menuSelection) {
+    console.log(`📋 Menu selected: ${menuSelection.id} - ${menuSelection.title}`);
+    await handleMenuSelection(customerId, menuSelection, contactName);
+    return;
+  }
+
+  // Otherwise handle as regular button click
   const buttonData = buttonService.parseButtonClick(interactive);
   
   if (!buttonData) {
@@ -83,16 +99,17 @@ async function handleButtonClick(staffId, interactive) {
 
   if (buttonData.type === 'end_handoff') {
     // End handoff for customer
-    const customerId = buttonData.customerId;
+    const targetCustomerId = buttonData.customerId;
+    const staffId = customerId; // The person clicking the button is staff
     
     // CRITICAL: Check if handoff still exists and is active
-    const handoffDetails = await handoffService.getHandoffDetails(customerId);
+    const handoffDetails = await handoffService.getHandoffDetails(targetCustomerId);
     
     if (!handoffDetails) {
       await sendWhatsAppMessage(staffId, {
         text: { body: `❌ This handoff no longer exists. It may have been closed already.` }
       });
-      console.log(`⚠️  Staff tried to end non-existent handoff for ${customerId}`);
+      console.log(`⚠️  Staff tried to end non-existent handoff for ${targetCustomerId}`);
       return;
     }
     
@@ -100,7 +117,7 @@ async function handleButtonClick(staffId, interactive) {
       await sendWhatsAppMessage(staffId, {
         text: { body: `❌ This handoff was already closed. Customer is now being handled by the bot.` }
       });
-      console.log(`⚠️  Staff tried to end already resolved handoff for ${customerId}`);
+      console.log(`⚠️  Staff tried to end already resolved handoff for ${targetCustomerId}`);
       return;
     }
     
@@ -114,8 +131,8 @@ async function handleButtonClick(staffId, interactive) {
     }
     
     // All checks passed - end the handoff
-    await handoffService.endHandoff(customerId);
-    await contextService.setHandoffStatus(customerId, false);
+    await handoffService.endHandoff(targetCustomerId);
+    await contextService.setHandoffStatus(targetCustomerId, false);
     
     // Send goodbye message to customer
     const goodbyeMessage = `Thank you for contacting IronCore Fitness! 💪
@@ -124,29 +141,30 @@ Our automated assistant is now back online to help you. Feel free to reach out a
 
 Stay strong! 🏋️‍♂️`;
     
-    await sendWhatsAppMessage(customerId, {
+    await sendWhatsAppMessage(targetCustomerId, {
       text: { body: goodbyeMessage }
     });
     
     // Save goodbye message to context
-    await contextService.addMessage(customerId, 'assistant', goodbyeMessage);
+    await contextService.addMessage(targetCustomerId, 'assistant', goodbyeMessage);
     
     await sendWhatsAppMessage(staffId, {
-      text: { body: `✅ Handoff ended for ${customerId}\nBot is now active for this customer.` }
+      text: { body: `✅ Handoff ended for ${targetCustomerId}\nBot is now active for this customer.` }
     });
     
   } else if (buttonData.type === 'assign') {
     // Assign handoff to this staff member
-    const customerId = buttonData.customerId;
+    const targetCustomerId = buttonData.customerId;
+    const staffId = customerId; // The person clicking the button is staff
     
     // CRITICAL: Check if handoff still exists and is not resolved
-    const handoffDetails = await handoffService.getHandoffDetails(customerId);
+    const handoffDetails = await handoffService.getHandoffDetails(targetCustomerId);
     
     if (!handoffDetails) {
       await sendWhatsAppMessage(staffId, {
         text: { body: `❌ This handoff no longer exists. It may have been closed already.` }
       });
-      console.log(`⚠️  Staff tried to assign closed handoff for ${customerId}`);
+      console.log(`⚠️  Staff tried to assign closed handoff for ${targetCustomerId}`);
       return;
     }
     
@@ -154,7 +172,7 @@ Stay strong! 🏋️‍♂️`;
       await sendWhatsAppMessage(staffId, {
         text: { body: `❌ This handoff was already closed. Customer is now being handled by the bot.` }
       });
-      console.log(`⚠️  Staff tried to assign resolved handoff for ${customerId}`);
+      console.log(`⚠️  Staff tried to assign resolved handoff for ${targetCustomerId}`);
       return;
     }
     
@@ -167,23 +185,65 @@ Stay strong! 🏋️‍♂️`;
     }
     
     // All checks passed - assign the handoff
-    await handoffService.assignToStaff(customerId, staffId);
+    await handoffService.assignToStaff(targetCustomerId, staffId);
     
     // Send confirmation with end handoff button
-    const endButton = buttonService.createEndHandoffButton(customerId);
+    const endButton = buttonService.createEndHandoffButton(targetCustomerId);
     await sendWhatsAppMessage(staffId, endButton);
     
-    console.log(`👤 Handoff for ${customerId} assigned to staff ${staffId} via button`);
+    console.log(`👤 Handoff for ${targetCustomerId} assigned to staff ${staffId} via button`);
     
   } else if (buttonData.type === 'bot_on') {
+    const staffId = customerId; // The person clicking the button is staff
     botState.enableBot();
     const response = buttonService.createBotOffButton();
     await sendWhatsAppMessage(staffId, response);
     
   } else if (buttonData.type === 'bot_off') {
+    const staffId = customerId; // The person clicking the button is staff
     botState.disableBot();
     const response = buttonService.createBotOnButton();
     await sendWhatsAppMessage(staffId, response);
+  }
+}
+
+// Handle menu selection
+async function handleMenuSelection(userId, menuSelection, contactName = null) {
+  try {
+    // Get response for selected menu item
+    const response = welcomeMenu.getMenuResponse(menuSelection.id);
+    
+    if (!response) {
+      console.log(`⚠️  Unknown menu selection: ${menuSelection.id}`);
+      return;
+    }
+
+    // Send response
+    await sendWhatsAppMessage(userId, { text: { body: response } });
+    
+    // Save to context
+    await contextService.addMessage(userId, 'user', `[Selected: ${menuSelection.title}]`);
+    await contextService.addMessage(userId, 'assistant', response);
+    
+    // Check if this menu item triggers handoff
+    if (welcomeMenu.shouldTriggerHandoffForMenu(menuSelection.id)) {
+      console.log(`🚨 Menu selection triggered handoff: ${menuSelection.id}`);
+      
+      // Small delay so response is sent first
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Trigger handoff
+      const reason = menuSelection.id === 'menu_trial' ? 'booking' : 'user_requested';
+      await handoffService.addToHandoffQueue(userId, `Menu: ${menuSelection.title}`, reason, contactName);
+      await contextService.setHandoffStatus(userId, true, reason);
+      
+      const handoffMessage = handoffService.getHandoffMessage(reason);
+      await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
+      await contextService.addMessage(userId, 'assistant', handoffMessage);
+    }
+    
+  } catch (error) {
+    console.error('❌ Error handling menu selection:', error.message);
   }
 }
 
@@ -319,6 +379,22 @@ async function handleCustomerMessage(userId, text, contactName = null) {
       return;
     }
 
+    // Detect intent first
+    const intent = intentService.detectIntent(text);
+    console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
+
+    // Check if this is a greeting - send welcome menu
+    if (intent.type === 'greeting') {
+      console.log(`👋 Greeting detected from ${userId} - Sending welcome menu`);
+      const welcomeMenuPayload = welcomeMenu.createWelcomeMenu();
+      await sendWhatsAppMessage(userId, welcomeMenuPayload);
+      
+      // Save to context
+      await contextService.addMessage(userId, 'user', text);
+      await contextService.addMessage(userId, 'assistant', '[Welcome Menu Sent]');
+      return;
+    }
+
     // Check if user is in handoff mode
     const inHandoff = await contextService.isInHandoff(userId);
     if (inHandoff) {
@@ -395,8 +471,8 @@ async function handleCustomerMessage(userId, text, contactName = null) {
     if (handoffCheck.shouldHandoff && isBookingRequest) {
       // Provide timing info THEN trigger handoff
       const timingInfo = `📅 Our gym is open:
-Monday-Saturday: 6:00 AM - 11:00 PM
-Sunday: 7:00 AM - 9:00 PM
+Monday-Saturday: 6:00 AM - 10:00 PM
+Sunday: 8:00 AM - 2:00 PM
 
 For trial bookings and membership details, our team will assist you personally. Connecting you with staff now...`;
       
@@ -443,10 +519,6 @@ For trial bookings and membership details, our team will assist you personally. 
         return; // Exit here - don't continue to AI response
       }
     }
-
-    // Detect intent
-    const intent = intentService.detectIntent(text);
-    console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
 
     // Get AI response with context
     const response = await aiService.generateResponse(text, intent, userId);
