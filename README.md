@@ -110,7 +110,6 @@ whatsapp-chatbot-backend/
 ├── scripts/
 │   └── ... (utility scripts)
 ├── test-*.js                      # Test suites
-├── .env.example                   # Environment template
 ├── .gitignore
 └── package.json
 ```
