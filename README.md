@@ -426,7 +426,6 @@ After deployment:
 4. Set verify token (from .env)
 5. Subscribe to messages
 
-See detailed deployment guide in repository.
 
 ---
 
