@@ -138,10 +138,7 @@ npm install
 
 ### Step 3: Configure Environment
 
-Create `.env` file:
-```bash
-cp .env.example .env
-```
+Create `.env` file
 
 Edit `.env` with your credentials:
 ```env
