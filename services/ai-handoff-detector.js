@@ -56,6 +56,21 @@ RESPONSE (YES or NO only):`;
  * @returns {Promise<boolean>} True if handoff should be triggered
  */
 async function detectHandoffIntent(message) {
+  // CRITICAL: Skip AI detection for short affirmative/continuation messages
+  // These are conversational responses, NOT handoff requests
+  const skipPatterns = [
+    /^(yes|yeah|yep|yup|sure|ok|okay|alright|right|correct|please|ya|yea|definitely|absolutely|of course|no|nope|nah|hmm?|huh|umm?|\?+|\.+|!+)[\s!.,?]*$/i
+  ];
+  
+  const lowerMessage = message.toLowerCase().trim();
+  
+  for (const pattern of skipPatterns) {
+    if (pattern.test(lowerMessage)) {
+      console.log(`⚡ Skipping AI handoff detection for short message: "${message}"`);
+      return false;
+    }
+  }
+  
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
