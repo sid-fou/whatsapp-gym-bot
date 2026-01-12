@@ -220,11 +220,48 @@ async function handleMenuSelection(userId, menuSelection, contactName = null) {
 
     console.log(`🤖 Processing menu selection as AI query: "${query}"`);
     
+    // CRITICAL: Check if this menu item triggers handoff FIRST
+    // If it does, skip AI response entirely and go directly to handoff
+    if (welcomeMenu.shouldTriggerHandoffForMenu(menuSelection.id)) {
+      console.log(`🚨 Menu selection triggers handoff: ${menuSelection.id} - Skipping AI response`);
+      
+      // Save to context
+      await contextService.addMessage(userId, 'user', query);
+      
+      // Trigger handoff directly
+      const reason = menuSelection.id === 'menu_trial' ? 'booking' : 'user_requested';
+      await handoffService.addToHandoffQueue(userId, query, reason, contactName);
+      await contextService.setHandoffStatus(userId, true, reason);
+      
+      const handoffMessage = handoffService.getHandoffMessage(reason);
+      await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
+      await contextService.addMessage(userId, 'assistant', handoffMessage);
+      
+      console.log(`✅ Handoff triggered for menu selection: ${menuSelection.title}`);
+      return; // Exit here - don't continue to AI response
+    }
+    
     // Detect intent for the query (using AI)
     const intent = await intentService.detectIntent(query);
     
     // Get AI response based on gym_knowledge.txt
     const response = await aiService.generateResponse(query, intent, userId);
+    
+    // Handle case where AI returns null (handoff needed)
+    if (response === null) {
+      console.log(`🚨 AI detected handoff need for menu query`);
+      
+      await contextService.addMessage(userId, 'user', query);
+      
+      const reason = 'ai_detected';
+      await handoffService.addToHandoffQueue(userId, query, reason, contactName);
+      await contextService.setHandoffStatus(userId, true, reason);
+      
+      const handoffMessage = handoffService.getHandoffMessage(reason);
+      await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
+      await contextService.addMessage(userId, 'assistant', handoffMessage);
+      return;
+    }
     
     // Save to context (menu selection as user message)
     await contextService.addMessage(userId, 'user', query);
@@ -233,23 +270,6 @@ async function handleMenuSelection(userId, menuSelection, contactName = null) {
     // Send AI-generated response
     await sendWhatsAppMessage(userId, { text: { body: response } });
     console.log(`✅ AI response sent for menu selection: ${menuSelection.title}`);
-    
-    // Check if this menu item triggers handoff
-    if (welcomeMenu.shouldTriggerHandoffForMenu(menuSelection.id)) {
-      console.log(`🚨 Menu selection triggered handoff: ${menuSelection.id}`);
-      
-      // Small delay so response is sent first
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Trigger handoff
-      const reason = menuSelection.id === 'menu_trial' ? 'booking' : 'user_requested';
-      await handoffService.addToHandoffQueue(userId, query, reason, contactName);
-      await contextService.setHandoffStatus(userId, true, reason);
-      
-      const handoffMessage = handoffService.getHandoffMessage(reason);
-      await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
-      await contextService.addMessage(userId, 'assistant', handoffMessage);
-    }
     
   } catch (error) {
     console.error('❌ Error handling menu selection:', error.message);

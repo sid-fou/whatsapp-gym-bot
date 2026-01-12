@@ -33,3 +33,7 @@ ngrok.zip
 # Internal Documentation (not for GitHub)
 DEVELOPMENT-HISTORY.md
 docs/API-ADDITIONS.md
+
+# Test files (keep locally, not on GitHub)
+test*.js
+test-*.js

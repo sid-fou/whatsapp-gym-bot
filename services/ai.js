@@ -114,8 +114,9 @@ async function generateResponse(userMessage, intent, userId) {
     if (data.choices && data.choices[0] && data.choices[0].message) {
       const aiResponse = data.choices[0].message.content.trim();
       
-      // Check if AI detected handoff need
-      if (aiResponse === 'HANDOFF_REQUIRED') {
+      // Check if AI detected handoff need (check if response contains or starts with HANDOFF_REQUIRED)
+      if (aiResponse.includes('HANDOFF_REQUIRED') || aiResponse.toUpperCase().includes('HANDOFF_REQUIRED')) {
+        console.log('🚨 AI response contained HANDOFF_REQUIRED - triggering handoff');
         return null; // Signal to webhook that handoff is needed
       }
       

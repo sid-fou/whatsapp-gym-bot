@@ -24,6 +24,7 @@ async function detectIntentWithAI(message) {
 
             CATEGORIES:
             - greeting: Simple greetings like "hi", "hello", "hey", "good morning" (ONLY if the ENTIRE message is just a greeting with no other intent)
+            - affirmative: Short confirmations like "yes", "yeah", "ok", "sure", "please", "alright" (user is continuing a conversation)
             - timings: Questions about gym hours, opening times, schedule
             - pricing: Questions about membership costs, plans, fees, pricing
             - trial: Questions about trial sessions, demos, testing the gym
@@ -40,6 +41,8 @@ async function detectIntentWithAI(message) {
             3. "Hello, I need membership" → pricing (NOT greeting)
             4. "Hey, where are you located?" → location (NOT greeting)
             5. ONLY classify as "greeting" if the ENTIRE message is JUST a greeting with nothing else
+            6. Short affirmative responses like "yes", "yeah", "ok", "sure" → affirmative (NOT greeting)
+            7. "Yes" alone is ALWAYS affirmative, NEVER greeting
 
             Respond with ONLY the category name, nothing else.`
           },
@@ -62,6 +65,10 @@ async function detectIntentWithAI(message) {
       let type = 'general';
       if (category === 'greeting') {
         type = 'greeting';
+      } else if (category === 'affirmative') {
+        // Affirmative responses should continue conversation with AI context
+        type = 'general';
+        console.log(`✅ AI detected affirmative response - will continue conversation with context`);
       } else if (category === 'booking' || category === 'trial') {
         type = 'booking';
       } else if (['timings', 'pricing', 'training', 'location', 'rules', 'services'].includes(category)) {
@@ -88,6 +95,18 @@ async function detectIntentWithAI(message) {
  */
 function detectIntentKeyword(message) {
   const lowerMessage = message.toLowerCase().trim();
+  
+  // CRITICAL: Short affirmative responses should continue conversation, NOT trigger greeting menu
+  const affirmativeWords = ['yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'alright', 'right', 'correct', 'please', 'ya', 'yea', 'definitely', 'absolutely', 'of course'];
+  const isAffirmative = affirmativeWords.some(word => {
+    const pattern = new RegExp(`^${word}[\\s!.,?]*$`, 'i');
+    return pattern.test(lowerMessage);
+  });
+  
+  if (isAffirmative) {
+    console.log(`✅ Detected affirmative response: "${message}" - treating as general (continue conversation)`);
+    return { type: 'general', category: 'affirmative' };
+  }
   
   // CRITICAL: Only match greeting if it's JUST a greeting word, nothing else
   const greetingWords = ['hi', 'hello', 'hey', 'good morning', 'good evening', 'namaste', 'yo', 'sup', 'howdy'];

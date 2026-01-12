@@ -2,6 +2,11 @@
 const staffManagement = require('../staff-management');
 
 async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaffNumber = null, customerName = null) {
+  console.log(`\n📣 Starting WhatsApp staff notification...`);
+  console.log(`   Customer: ${userId}`);
+  console.log(`   Reason: ${reason}`);
+  console.log(`   Specific staff: ${specificStaffNumber || 'All staff'}`);
+  
   // If specific staff requested, notify only them
   let staffNumbers = [];
   if (specificStaffNumber) {
@@ -10,17 +15,21 @@ async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaff
     // Get all staff who should receive notifications from database
     const staff = await staffManagement.getNotificationRecipients();
     staffNumbers = staff.map(s => s.phoneNumber);
+    console.log(`   Staff from DB: ${staffNumbers.length} recipients`);
     
     // Fallback to env if database is empty
     if (staffNumbers.length === 0) {
       staffNumbers = process.env.STAFF_WHATSAPP_NUMBERS?.split(',') || [];
+      console.log(`   Fallback to env: ${staffNumbers.join(', ')}`);
     }
   }
   
   if (staffNumbers.length === 0) {
-    console.warn('⚠️  No staff WhatsApp numbers configured');
+    console.warn('⚠️  No staff WhatsApp numbers configured - NO NOTIFICATIONS SENT');
     return false;
   }
+  
+  console.log(`   Will notify: ${staffNumbers.join(', ')}`);
 
   // Use the EXACT format that was working on 3/1/2026
   const notificationMessage = `🚨 *CUSTOMER NEEDS ASSISTANCE*
