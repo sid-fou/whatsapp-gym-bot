@@ -16,7 +16,11 @@ function initializeTransporter() {
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS // Use App Password for Gmail
-    }
+    },
+    // Add timeout settings for Render's free tier
+    connectionTimeout: 10000, // 10 seconds to connect
+    greetingTimeout: 10000,   // 10 seconds for greeting
+    socketTimeout: 15000,     // 15 seconds for socket
   });
 
   console.log('✅ Email notifications enabled');
@@ -100,6 +104,23 @@ async function notifyStaff(userId, userMessage, reason, specificStaffPhone = nul
     return true;
   } catch (error) {
     console.error('❌ Failed to send email notification:', error.message);
+    
+    // For timeout errors, try once more with fresh connection
+    if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
+      console.log('🔄 Retrying email with fresh connection...');
+      try {
+        // Reset transporter for fresh connection
+        transporter = initializeTransporter();
+        if (transporter) {
+          await transporter.sendMail(mailOptions);
+          console.log(`📧 Staff notification sent on retry`);
+          return true;
+        }
+      } catch (retryError) {
+        console.error('❌ Email retry also failed:', retryError.message);
+      }
+    }
+    
     return false;
   }
 }
