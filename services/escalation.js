@@ -13,11 +13,24 @@ async function checkUnacceptedHandoffs() {
   try {
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     
+    // First, log all waiting handoffs for debugging
+    const allWaitingHandoffs = await Handoff.find({ status: 'waiting' });
+    if (allWaitingHandoffs.length > 0) {
+      console.log(`📋 Current waiting handoffs: ${allWaitingHandoffs.length}`);
+      allWaitingHandoffs.forEach(h => {
+        const age = Math.floor((Date.now() - h.timestamp) / 60000);
+        console.log(`   - ${h.userId}: age=${age}min, staffMember=${h.staffMember || 'NONE'}`);
+      });
+    }
+    
     // Find handoffs that are waiting (not assigned) for more than 5 minutes
     const unacceptedHandoffs = await Handoff.find({
       status: 'waiting', // Not assigned yet
       timestamp: { $lt: fiveMinutesAgo },
-      staffMember: null // No staff assigned
+      $or: [
+        { staffMember: null },
+        { staffMember: { $exists: false } }
+      ]
     });
 
     if (unacceptedHandoffs.length > 0) {
@@ -70,10 +83,14 @@ function clearEscalation(userId) {
  */
 function startEscalationSystem() {
   // Check immediately on start
+  console.log('🔄 Running initial escalation check...');
   checkUnacceptedHandoffs();
   
   // Then check every minute
-  setInterval(checkUnacceptedHandoffs, 60 * 1000);
+  setInterval(() => {
+    console.log('🔄 Running scheduled escalation check...');
+    checkUnacceptedHandoffs();
+  }, 60 * 1000);
   
   console.log('✅ Escalation system started (checks every 1 minute)');
 }

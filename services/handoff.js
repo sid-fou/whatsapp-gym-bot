@@ -174,6 +174,7 @@ async function addToHandoffQueue(userId, message, reason, customerName = null) {
     const requestedStaff = await detectRequestedStaff(message);
     
     // Save to database (upsert to avoid duplicates)
+    // IMPORTANT: Explicitly set staffMember to null for new handoffs
     await Handoff.findOneAndUpdate(
       { userId },
       {
@@ -183,7 +184,9 @@ async function addToHandoffQueue(userId, message, reason, customerName = null) {
         reason,
         status: 'waiting',
         timestamp: new Date(),
-        requestedStaffMember: requestedStaff?.name || null
+        requestedStaffMember: requestedStaff?.name || null,
+        staffMember: null,  // CRITICAL: Reset staff assignment for new handoff
+        assignedAt: null    // Reset assignment time too
       },
       { upsert: true, new: true }
     );
