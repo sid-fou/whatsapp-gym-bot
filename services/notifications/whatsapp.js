@@ -1,11 +1,19 @@
 // Send WhatsApp message to staff when handoff occurs
 const staffManagement = require('../staff-management');
 
+// Check if using test number (test numbers can only send template messages)
+function isTestNumber() {
+  const phoneNumberId = process.env.PHONE_NUMBER_ID;
+  // Meta's test phone number ID
+  return phoneNumberId === '927001110500161';
+}
+
 async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaffNumber = null, customerName = null) {
   console.log(`\n📣 Starting WhatsApp staff notification...`);
   console.log(`   Customer: ${userId}`);
   console.log(`   Reason: ${reason}`);
   console.log(`   Specific staff: ${specificStaffNumber || 'All staff'}`);
+  console.log(`   Using test number: ${isTestNumber() ? 'YES (template only)' : 'NO (full messaging)'}`);
   
   // If specific staff requested, notify only them
   let staffNumbers = [];
@@ -31,16 +39,6 @@ async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaff
   
   console.log(`   Will notify: ${staffNumbers.join(', ')}`);
 
-  // Use the EXACT format that was working on 3/1/2026
-  const notificationMessage = `🚨 *CUSTOMER NEEDS ASSISTANCE*
-
-📱 Customer: ${userId}${customerName ? ` (${customerName})` : ''}
-🔍 Reason: ${reason}
-💬 Message: "${userMessage}"
-⏰ Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-
-${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign to Me" to take this handoff, or reply with "ok" to acknowledge.'}`;
-
   const url = `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`;
 
   try {
@@ -54,29 +52,57 @@ ${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign
         continue;
       }
       
-      // Use EXACT format that worked on 3/1/2026
-      const data = {
-        messaging_product: 'whatsapp',
-        to: cleanStaffNumber,
-        type: 'interactive',
-        interactive: {
-          type: 'button',
-          body: {
-            text: notificationMessage
-          },
-          action: {
-            buttons: [
-              {
-                type: 'reply',
-                reply: {
-                  id: `assign_${userId}`,
-                  title: '✅ Assign to Me'
-                }
-              }
-            ]
+      let data;
+      
+      // If using test number, send template message (only type that gets delivered)
+      // If using real number, send interactive message with buttons
+      if (isTestNumber()) {
+        // Use hello_world template as fallback for test number
+        // Note: For production, create a custom "staff_notification" template
+        data = {
+          messaging_product: 'whatsapp',
+          to: cleanStaffNumber,
+          type: 'template',
+          template: {
+            name: 'hello_world',
+            language: { code: 'en_US' }
           }
-        }
-      };
+        };
+        console.log(`   📋 Using template message (test number limitation)`);
+      } else {
+        // Full interactive message for real business numbers
+        const notificationMessage = `🚨 *CUSTOMER NEEDS ASSISTANCE*
+
+📱 Customer: ${userId}${customerName ? ` (${customerName})` : ''}
+🔍 Reason: ${reason}
+💬 Message: "${userMessage}"
+⏰ Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+
+${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign to Me" to take this handoff, or reply with "ok" to acknowledge.'}`;
+
+        data = {
+          messaging_product: 'whatsapp',
+          to: cleanStaffNumber,
+          type: 'interactive',
+          interactive: {
+            type: 'button',
+            body: {
+              text: notificationMessage
+            },
+            action: {
+              buttons: [
+                {
+                  type: 'reply',
+                  reply: {
+                    id: `assign_${userId}`,
+                    title: '✅ Assign to Me'
+                  }
+                }
+              ]
+            }
+          }
+        };
+      }
 
       const response = await fetch(url, {
         method: 'POST',
