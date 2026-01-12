@@ -230,14 +230,21 @@ async function handleMenuSelection(userId, menuSelection, contactName = null) {
       
       // Trigger handoff directly
       const reason = menuSelection.id === 'menu_trial' ? 'booking' : 'user_requested';
-      await handoffService.addToHandoffQueue(userId, query, reason, contactName);
+      
+      // CRITICAL: Set handoff status FIRST (before notifications which can timeout)
       await contextService.setHandoffStatus(userId, true, reason);
       
+      // Send handoff message to customer IMMEDIATELY
       const handoffMessage = handoffService.getHandoffMessage(reason);
       await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
       await contextService.addMessage(userId, 'assistant', handoffMessage);
       
       console.log(`✅ Handoff triggered for menu selection: ${menuSelection.title}`);
+      
+      // NOW add to queue and send notifications (can be slow due to email timeouts)
+      handoffService.addToHandoffQueue(userId, query, reason, contactName)
+        .catch(err => console.error('❌ Background handoff queue error:', err.message));
+      
       return; // Exit here - don't continue to AI response
     }
     
@@ -254,12 +261,18 @@ async function handleMenuSelection(userId, menuSelection, contactName = null) {
       await contextService.addMessage(userId, 'user', query);
       
       const reason = 'ai_detected';
-      await handoffService.addToHandoffQueue(userId, query, reason, contactName);
+      
+      // CRITICAL: Set handoff status FIRST
       await contextService.setHandoffStatus(userId, true, reason);
       
       const handoffMessage = handoffService.getHandoffMessage(reason);
       await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
       await contextService.addMessage(userId, 'assistant', handoffMessage);
+      
+      // Background notification (can be slow)
+      handoffService.addToHandoffQueue(userId, query, reason, contactName)
+        .catch(err => console.error('❌ Background handoff queue error:', err.message));
+      
       return;
     }
     
@@ -540,9 +553,11 @@ For trial bookings and membership details, our team will assist you personally. 
         // IMPORTANT: Save the handoff trigger message to context
         await contextService.addMessage(userId, 'user', text);
         
-        await handoffService.addToHandoffQueue(userId, text, handoffCheck.reason, contactName);
+        // CRITICAL: Set handoff status FIRST (before notifications which can timeout)
+        // This ensures bot pauses immediately for subsequent messages
         await contextService.setHandoffStatus(userId, true, handoffCheck.reason);
         
+        // Send handoff message to customer IMMEDIATELY
         const handoffMessage = handoffService.getHandoffMessage(handoffCheck.reason);
         await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
         
@@ -550,6 +565,12 @@ For trial bookings and membership details, our team will assist you personally. 
         await contextService.addMessage(userId, 'assistant', handoffMessage);
         
         logConversation(userId, text, handoffMessage);
+        
+        // NOW add to queue and send notifications (can be slow due to email timeouts)
+        // This runs after customer already sees handoff message and bot is paused
+        handoffService.addToHandoffQueue(userId, text, handoffCheck.reason, contactName)
+          .catch(err => console.error('❌ Background handoff queue error:', err.message));
+        
         return; // Exit here - don't continue to AI response
       }
     }
@@ -579,12 +600,18 @@ For trial bookings and membership details, our team will assist you personally. 
       }
       
       console.log(`🚨 Handoff triggered by AI`);
-      await handoffService.addToHandoffQueue(userId, text, 'ai_detected', contactName);
+      
+      // CRITICAL: Set handoff status FIRST
       await contextService.setHandoffStatus(userId, true, 'ai_detected');
       
       const handoffMessage = handoffService.getHandoffMessage('ai_detected');
       await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
       logConversation(userId, text, handoffMessage);
+      
+      // Background notification (can be slow)
+      handoffService.addToHandoffQueue(userId, text, 'ai_detected', contactName)
+        .catch(err => console.error('❌ Background handoff queue error:', err.message));
+      
       return;
     }
 
