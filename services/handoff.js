@@ -197,20 +197,26 @@ async function addToHandoffQueue(userId, message, reason, customerName = null) {
     }
     
     // Send notifications to staff
+    console.log(`📣 About to send notifications for handoff...`);
     try {
       // If specific staff requested, notify only them
       if (requestedStaff) {
+        console.log(`📲 Notifying specific staff: ${requestedStaff.phoneNumber}`);
         await notifyStaffViaWhatsApp(userId, message, reason, requestedStaff.phoneNumber, customerName);
         // Also send email to specific staff
         await notifyStaff(userId, message, reason, requestedStaff.phoneNumber, customerName);
       } else {
         // Otherwise notify all staff
+        console.log(`📲 Notifying all staff via WhatsApp...`);
         await notifyStaffViaWhatsApp(userId, message, reason, null, customerName);
+        console.log(`📧 Notifying all staff via Email...`);
         // Email notification to all staff (excluding owner initially)
         await notifyStaff(userId, message, reason, null, customerName);
       }
+      console.log(`✅ Notification process completed`);
     } catch (error) {
       console.error('❌ Failed to notify staff:', error.message);
+      console.error('   Stack:', error.stack);
     }
   } catch (error) {
     console.error('❌ Failed to add to handoff queue:', error.message);
