@@ -15,6 +15,7 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 
 ### 🎯 Interactive Welcome Menu
 - **Greeting detection** - Shows menu on every greeting (Hi, Hello, Hey, etc.)
+- **Affirmative handling** - "Yes", "Ok", "Sure" continue conversation (don't re-trigger menu)
 - **AI-powered responses** - Menu selections generate natural AI responses from `gym_knowledge.txt`
 - **Interactive list menu** with 6 quick options:
   - 🕐 Gym Timings - AI explains operating hours
@@ -36,7 +37,8 @@ Intelligent WhatsApp chatbot with AI-powered responses, staff handoff system, an
 
 ### 🤝 Staff Handoff System
 - **Smart handoff detection** (3-layer: keywords + AI + booking)
-- **Staff notifications** (WhatsApp + Email)
+- **Clean handoff flow** - Single handoff message per trigger (no duplicates)
+- **Staff notifications** (WhatsApp + Email with detailed logging)
 - **Auto-assignment** (first to respond gets assigned)
 - **Direct messaging** (staff replies auto-forward to customer)
 - **Owner escalation** (5-minute timer if unaccepted)
@@ -124,7 +126,6 @@ whatsapp-chatbot-backend/
 │   └── STAFF-COMMANDS.md          # Staff WhatsApp commands
 ├── scripts/
 │   └── ... (utility scripts)
-├── test-*.js                      # Test suites
 ├── .gitignore
 └── package.json
 ```
@@ -286,10 +287,15 @@ See [API-DOCUMENTATION.md](docs/API-DOCUMENTATION.md) for complete reference.
 
 ## 🧪 Testing
 
+Test files are kept locally and excluded from the repository via `.gitignore`.
+
 ### Local Testing
 ```bash
-# Test all systems
-npm test
+# Test MongoDB connection
+node check-mongodb.js
+
+# Test bug fixes (intent detection, handoff flow)
+node test-fixes.js
 
 # Test specific modules
 node test-context.js         # MongoDB context
@@ -514,10 +520,28 @@ Built for IronCore Fitness automation.
 
 ---
 
-**Version:** 2.0.0  
+**Version:** 2.1.0  
 **Last Updated:** January 2026  
 **Status:** Production Ready ✅  
 Siddharth Singh - [@sid](https://x.com/sid_fou)
+
+---
+
+## 📋 Changelog
+
+### v2.1.0 (January 2026)
+- **Fixed:** Affirmative responses ("Yes", "Ok", "Sure") no longer trigger welcome menu
+- **Fixed:** HANDOFF_REQUIRED detection now works with partial matches
+- **Fixed:** Menu handoff selections (Trial, Staff) send single clean message instead of duplicates
+- **Improved:** Staff WhatsApp notification logging for debugging
+- **Cleaned:** Test files removed from repository (kept locally via .gitignore)
+
+### v2.0.0 (January 2026)
+- Initial production release
+- Interactive welcome menu with AI responses
+- 3-layer handoff detection system
+- Staff management with notifications
+- Admin dashboard API (24+ endpoints)
 
 ---
 
