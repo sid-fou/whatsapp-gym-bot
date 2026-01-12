@@ -20,9 +20,14 @@ async function checkUnacceptedHandoffs() {
       staffMember: null // No staff assigned
     });
 
+    if (unacceptedHandoffs.length > 0) {
+      console.log(`🔍 Escalation check: Found ${unacceptedHandoffs.length} unaccepted handoff(s) older than 5 minutes`);
+    }
+
     for (const handoff of unacceptedHandoffs) {
       // Skip if already escalated (ONLY SEND ONCE)
       if (escalatedHandoffs.has(handoff.userId)) {
+        console.log(`⏭️  Already escalated: ${handoff.userId}`);
         continue;
       }
 
@@ -30,7 +35,7 @@ async function checkUnacceptedHandoffs() {
       
       console.log(`⚠️  Escalating unaccepted handoff for ${handoff.userId} (waiting ${minutesWaiting} mins)`);
       
-      await notifyOwnerEscalation(
+      const success = await notifyOwnerEscalation(
         handoff.userId,
         handoff.message,
         handoff.reason,
@@ -38,9 +43,13 @@ async function checkUnacceptedHandoffs() {
         handoff.customerName // Pass customer name to escalation
       );
       
-      // Mark as escalated (prevents sending again)
-      escalatedHandoffs.add(handoff.userId);
-      console.log(`✅ Escalation sent (will not send again for this handoff)`);
+      if (success) {
+        // Mark as escalated (prevents sending again)
+        escalatedHandoffs.add(handoff.userId);
+        console.log(`✅ Escalation email sent for ${handoff.userId}`);
+      } else {
+        console.log(`❌ Failed to send escalation email for ${handoff.userId}`);
+      }
     }
   } catch (error) {
     console.error('❌ Error checking unaccepted handoffs:', error.message);

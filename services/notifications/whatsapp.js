@@ -1,5 +1,5 @@
-// Send WhatsApp message to staff when handoff occurs
 const staffManagement = require('../staff-management');
+const contextService = require('../context');
 
 /**
  * Send staff notification via WhatsApp
@@ -44,15 +44,20 @@ async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaff
 
   const url = `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`;
 
-  // Build notification message
+  // Get conversation context to help staff understand what customer needs
+  const conversationSummary = await contextService.getConversationSummary(userId, 6);
+  
+  // Build notification message WITH context
   const notificationMessage = `🚨 *CUSTOMER NEEDS ASSISTANCE*
 
 📱 Customer: ${userId}${customerName ? ` (${customerName})` : ''}
 🔍 Reason: ${reason}
-💬 Message: "${userMessage}"
 ⏰ Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
 
-${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign to Me" to take this handoff, or reply with "ok" to acknowledge.'}`;
+📝 *Recent Conversation:*
+${conversationSummary}
+
+${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign to Me" to take this handoff.'}`;
 
   try {
     // Send notification to each staff member (EXCEPT the customer who triggered it)
@@ -65,7 +70,7 @@ ${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign
         continue;
       }
       
-      // Try interactive message first (works if 24-hour window is open)
+      // Try interactive message with button
       const interactiveData = {
         messaging_product: 'whatsapp',
         to: cleanStaffNumber,

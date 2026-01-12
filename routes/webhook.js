@@ -437,7 +437,7 @@ async function handleCustomerMessage(userId, text, contactName = null) {
       // Forward customer message to assigned staff member
       const handoffDetails = await handoffService.getHandoffDetails(userId);
       if (handoffDetails && handoffDetails.staffMember) {
-        // Use stored customer name or WhatsApp profile name
+        // Staff is assigned - forward to them
         const displayName = handoffDetails.customerName || contactName || userId;
         
         // Send customer message with End Handoff button
@@ -463,16 +463,10 @@ async function handleCustomerMessage(userId, text, contactName = null) {
         });
         console.log(`📨 Forwarded customer message to staff ${handoffDetails.staffMember}`);
       } else {
-        // No staff assigned yet, send to all staff as notification
-        const staffNumbers = process.env.STAFF_WHATSAPP_NUMBERS?.split(',') || [];
-        for (const staffNum of staffNumbers) {
-          await sendWhatsAppMessage(staffNum.trim(), {
-            text: { 
-              body: `📱 Message from customer ${userId} (in handoff):\n\n"${text}"\n\n_Type "ok" to take this handoff_` 
-            }
-          });
-        }
-        console.log(`📨 Broadcasted customer message to all staff (no assignment yet)`);
+        // No staff assigned yet - DON'T broadcast messages
+        // Staff will only see the initial notification. They need to click "Assign to Me" first.
+        console.log(`⏸️  Customer message during handoff, but no staff assigned yet - Not forwarding`);
+        console.log(`   Customer should wait for staff to assign themselves`);
       }
       
       return; // Exit - don't process further during handoff
@@ -585,28 +579,13 @@ For trial bookings and membership details, our team will assist you personally. 
 
     // Check if AI detected handoff need
     if (response === null) {
-      // Don't trigger handoff for simple acknowledgments or if in cooldown
-      const simpleMessages = ['ok', 'okay', 'k', 'yes', 'no', 'thanks', 'thank you', 'bye'];
-      const isSimpleMessage = simpleMessages.includes(text.toLowerCase().trim());
-      
       // IMPORTANT: Check if we already processed this as a specific staff request above
       if (isSpecificStaffRequest) {
         console.log(`⏭️  Skipping AI handoff - already handled as specific staff request`);
         return;
       }
       
-      if (isSimpleMessage) {
-        console.log(`⏸️  AI handoff blocked - Simple message`);
-        // Send a contextual acknowledgment instead
-        const simpleResponse = "Got it! If you need anything else, just let me know. You can also type 'staff' to speak with our team directly.";
-        await sendWhatsAppMessage(userId, { text: { body: simpleResponse } });
-        await contextService.addMessage(userId, 'user', text);
-        await contextService.addMessage(userId, 'assistant', simpleResponse);
-        logConversation(userId, text, simpleResponse);
-        return;
-      }
-      
-      // If in cooldown but AI wants handoff, let user know they can request staff
+      // If in cooldown, let user know they can request staff explicitly
       if (inCooldown) {
         console.log(`⏸️  AI handoff blocked - Cooldown period (but informing user)`);
         const cooldownResponse = "I'd be happy to connect you with our team for this! Just type 'staff' or 'talk to staff' and I'll get someone to help you right away. 💪";
@@ -617,6 +596,8 @@ For trial bookings and membership details, our team will assist you personally. 
         return;
       }
       
+      // AI detected handoff need - proceed with handoff
+      // (Removed simple message blocking - if AI says handoff is needed, trust it)
       console.log(`🚨 Handoff triggered by AI`);
       
       // CRITICAL: Set handoff status FIRST

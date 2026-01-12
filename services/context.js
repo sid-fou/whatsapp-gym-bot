@@ -303,6 +303,45 @@ async function getContextStats() {
   }
 }
 
+/**
+ * Get conversation summary for staff context
+ * Returns last few messages to help staff understand what customer needs
+ * @param {string} userId - User's WhatsApp number
+ * @param {number} messageCount - Number of recent messages to include (default: 6)
+ * @returns {Promise<string>} Summary string
+ */
+async function getConversationSummary(userId, messageCount = 6) {
+  if (!isDBConnected()) {
+    return 'No conversation history available.';
+  }
+
+  try {
+    const context = await Context.findOne({ userId });
+    
+    if (!context || !context.messages || context.messages.length === 0) {
+      return 'New conversation - no history.';
+    }
+
+    // Get last N messages
+    const recentMessages = context.messages.slice(-messageCount);
+    
+    // Format for staff
+    const summary = recentMessages.map(msg => {
+      const role = msg.role === 'user' ? '👤 Customer' : '🤖 Bot';
+      // Truncate long messages
+      const content = msg.content.length > 100 
+        ? msg.content.substring(0, 100) + '...' 
+        : msg.content;
+      return `${role}: ${content}`;
+    }).join('\n');
+
+    return summary || 'No recent messages.';
+  } catch (error) {
+    console.error(`❌ Error getting conversation summary:`, error.message);
+    return 'Error retrieving conversation history.';
+  }
+}
+
 module.exports = {
   getOrCreateContext,
   addMessage,
@@ -314,5 +353,6 @@ module.exports = {
   isInHandoffCooldown,
   clearContext,
   getUsersInHandoff,
-  getContextStats
+  getContextStats,
+  getConversationSummary
 };
