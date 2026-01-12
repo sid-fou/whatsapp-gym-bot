@@ -472,7 +472,32 @@ async function handleCustomerMessage(userId, text, contactName = null) {
       return; // Exit - don't process further during handoff
     }
 
-    // Detect intent (only after confirming not in handoff)
+    // CRITICAL: Check if user is requesting a specific staff member FIRST (before intent detection)
+    // This ensures "Can I talk to Sunny" doesn't get caught by greeting detection
+    const requestedStaff = await handoffService.detectRequestedStaffFromMessage(text);
+    const isSpecificStaffRequest = !!requestedStaff;
+    
+    if (isSpecificStaffRequest) {
+      console.log(`🎯 Specific staff requested: ${requestedStaff.name} - Bypassing greeting check`);
+      
+      // Trigger handoff directly for specific staff request
+      await contextService.addMessage(userId, 'user', text);
+      await contextService.setHandoffStatus(userId, true, 'user_requested');
+      
+      const handoffMessage = handoffService.getHandoffMessage('user_requested');
+      await sendWhatsAppMessage(userId, { text: { body: handoffMessage } });
+      await contextService.addMessage(userId, 'assistant', handoffMessage);
+      
+      logConversation(userId, text, handoffMessage);
+      
+      // Notify specific staff
+      handoffService.addToHandoffQueue(userId, text, 'user_requested', contactName)
+        .catch(err => console.error('❌ Background handoff queue error:', err.message));
+      
+      return;
+    }
+
+    // Detect intent (only after confirming not specific staff request)
     const intent = await intentService.detectIntent(text);
     console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
 
@@ -488,24 +513,9 @@ async function handleCustomerMessage(userId, text, contactName = null) {
       return;
     }
 
-    // Check if user is requesting a specific staff member FIRST
-    const requestedStaff = await handoffService.detectRequestedStaffFromMessage(text);
-    const isSpecificStaffRequest = !!requestedStaff;
-    
-    if (isSpecificStaffRequest) {
-      console.log(`🎯 Specific staff requested: ${requestedStaff.name}`);
-    }
-    
     // Check if handoff should be triggered (with AI detection)
     const handoffCheck = await handoffService.shouldTriggerHandoffWithAI(text);
     console.log(`🔍 Handoff check: shouldHandoff=${handoffCheck.shouldHandoff}, reason=${handoffCheck.reason}`);
-    
-    // If specific staff requested, force handoff trigger
-    if (isSpecificStaffRequest && !handoffCheck.shouldHandoff) {
-      console.log(`✅ Forcing handoff - Specific staff detected`);
-      handoffCheck.shouldHandoff = true;
-      handoffCheck.reason = 'user_requested';
-    }
     
     // Check if it's a booking request - provide info FIRST
     const isBookingRequest = text.toLowerCase().match(/book|timing|schedule|reserve|appointment/i);
