@@ -25,6 +25,7 @@ async function detectIntentWithAI(message) {
             CATEGORIES:
             - greeting: Simple greetings like "hi", "hello", "hey", "good morning" (ONLY if the ENTIRE message is just a greeting with no other intent)
             - affirmative: Short confirmations like "yes", "yeah", "ok", "sure", "please", "alright" (user is continuing a conversation)
+            - continuation: Very short follow-ups like "?", "??", "...", "hm", "hmm" (user wants more info)
             - timings: Questions about gym hours, opening times, schedule
             - pricing: Questions about membership costs, plans, fees, pricing
             - trial: Questions about trial sessions, demos, testing the gym
@@ -43,6 +44,7 @@ async function detectIntentWithAI(message) {
             5. ONLY classify as "greeting" if the ENTIRE message is JUST a greeting with nothing else
             6. Short affirmative responses like "yes", "yeah", "ok", "sure" → affirmative (NOT greeting)
             7. "Yes" alone is ALWAYS affirmative, NEVER greeting
+            8. Single punctuation like "?" or "??" or "..." → continuation (NOT greeting)
 
             Respond with ONLY the category name, nothing else.`
           },
@@ -65,10 +67,10 @@ async function detectIntentWithAI(message) {
       let type = 'general';
       if (category === 'greeting') {
         type = 'greeting';
-      } else if (category === 'affirmative') {
-        // Affirmative responses should continue conversation with AI context
+      } else if (category === 'affirmative' || category === 'continuation') {
+        // Affirmative/continuation responses should continue conversation with AI context
         type = 'general';
-        console.log(`✅ AI detected affirmative response - will continue conversation with context`);
+        console.log(`✅ AI detected ${category} response - will continue conversation with context`);
       } else if (category === 'booking' || category === 'trial') {
         type = 'booking';
       } else if (['timings', 'pricing', 'training', 'location', 'rules', 'services'].includes(category)) {
@@ -95,6 +97,13 @@ async function detectIntentWithAI(message) {
  */
 function detectIntentKeyword(message) {
   const lowerMessage = message.toLowerCase().trim();
+  
+  // CRITICAL: Very short messages like "?" should continue conversation, not trigger menu
+  const shortContinuationMessages = ['?', '??', '...', '.', '!', 'hm', 'hmm', 'huh'];
+  if (shortContinuationMessages.includes(lowerMessage)) {
+    console.log(`✅ Detected short continuation: "${message}" - treating as general`);
+    return { type: 'general', category: 'continuation' };
+  }
   
   // CRITICAL: Short affirmative responses should continue conversation, NOT trigger greeting menu
   const affirmativeWords = ['yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'alright', 'right', 'correct', 'please', 'ya', 'yea', 'definitely', 'absolutely', 'of course'];
@@ -147,9 +156,29 @@ function detectIntentKeyword(message) {
 
 /**
  * Main intent detection function
- * Uses AI by default with keyword fallback
+ * Uses keyword detection FIRST for special short messages, then AI for everything else
  */
 async function detectIntent(message) {
+  const lowerMessage = message.toLowerCase().trim();
+  
+  // CRITICAL: For very short messages, use keyword detection FIRST (more reliable)
+  // This prevents AI variance from misclassifying simple responses
+  const shortMessages = ['?', '??', '...', '.', '!', 'yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 
+                        'alright', 'right', 'correct', 'please', 'ya', 'yea', 'definitely', 
+                        'absolutely', 'of course', 'hm', 'hmm', 'huh', 'no', 'nope', 'nah'];
+  
+  // Check if it's a short message that should bypass AI
+  const isShortSpecialMessage = shortMessages.some(word => {
+    const pattern = new RegExp(`^${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[\\s!.,?]*$`, 'i');
+    return pattern.test(lowerMessage);
+  });
+  
+  if (isShortSpecialMessage) {
+    console.log(`⚡ Using fast keyword detection for short message: "${message}"`);
+    return detectIntentKeyword(message);
+  }
+  
+  // For longer/complex messages, use AI detection
   return await detectIntentWithAI(message);
 }
 

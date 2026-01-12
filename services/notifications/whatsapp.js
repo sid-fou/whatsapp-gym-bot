@@ -88,16 +88,31 @@ ${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign
       });
 
       if (response.ok) {
+        const result = await response.json();
         console.log(`📲 WhatsApp notification sent to ${cleanStaffNumber}`);
+        console.log(`   Message ID: ${result.messages?.[0]?.id || 'unknown'}`);
       } else {
         const errorData = await response.json();
-        console.error(`❌ Failed to notify ${cleanStaffNumber}:`, errorData);
+        console.error(`❌ Failed to notify ${cleanStaffNumber}:`, JSON.stringify(errorData, null, 2));
+        
+        // Log specific error codes for debugging
+        if (errorData.error) {
+          console.error(`   Error code: ${errorData.error.code}`);
+          console.error(`   Error message: ${errorData.error.message}`);
+          if (errorData.error.code === 131030) {
+            console.error(`   💡 This phone number may not be in your WhatsApp test recipients list`);
+          }
+          if (errorData.error.code === 190) {
+            console.error(`   💡 Token may be expired - regenerate in Meta Business Suite`);
+          }
+        }
       }
     }
     
     return true;
   } catch (error) {
     console.error('❌ WhatsApp staff notification failed:', error.message);
+    console.error('   Stack:', error.stack);
     return false;
   }
 }

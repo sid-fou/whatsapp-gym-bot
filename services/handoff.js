@@ -157,6 +157,19 @@ async function shouldTriggerHandoffWithAI(message) {
 
 async function addToHandoffQueue(userId, message, reason, customerName = null) {
   try {
+    // CRITICAL: Check if handoff already exists for this user (prevents duplicate notifications)
+    const existingHandoff = await Handoff.findOne({ 
+      userId, 
+      status: { $in: ['waiting', 'active'] } 
+    });
+    
+    if (existingHandoff) {
+      console.log(`⚠️  Handoff already exists for ${userId} (status: ${existingHandoff.status}) - Skipping duplicate`);
+      // Still add to cache in case it was missing
+      activeHandoffs.add(userId);
+      return; // Don't send duplicate notifications
+    }
+    
     // Check if user is requesting a specific staff member
     const requestedStaff = await detectRequestedStaff(message);
     
