@@ -73,16 +73,18 @@ const contextSchema = new mongoose.Schema({
 contextSchema.index({ 'metadata.lastActivity': 1 });
 
 // Static method: Cleanup old contexts (older than 30 minutes)
+// CRITICAL: Does NOT delete contexts that are in active handoff
 contextSchema.statics.cleanupOldContexts = async function() {
   const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
   
   try {
     const result = await this.deleteMany({
-      'metadata.lastActivity': { $lt: thirtyMinutesAgo }
+      'metadata.lastActivity': { $lt: thirtyMinutesAgo },
+      'metadata.inHandoff': { $ne: true } // Don't delete if in handoff!
     });
     
     if (result.deletedCount > 0) {
-      console.log(`🗑️  Cleaned up ${result.deletedCount} old conversation(s)`);
+      console.log(`🗑️  Cleaned up ${result.deletedCount} old conversation(s) (preserved handoffs)`);
     }
     
     return result.deletedCount;

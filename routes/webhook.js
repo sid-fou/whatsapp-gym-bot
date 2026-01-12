@@ -412,23 +412,8 @@ async function handleCustomerMessage(userId, text, contactName = null) {
       return;
     }
 
-    // Detect intent first (using AI)
-    const intent = await intentService.detectIntent(text);
-    console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
-
-    // Check if this is a greeting - send welcome menu
-    if (intent.type === 'greeting') {
-      console.log(`👋 Greeting detected from ${userId} - Sending welcome menu`);
-      const welcomeMenuPayload = welcomeMenu.createWelcomeMenu();
-      await sendWhatsAppMessage(userId, welcomeMenuPayload);
-      
-      // Save to context
-      await contextService.addMessage(userId, 'user', text);
-      await contextService.addMessage(userId, 'assistant', '[Welcome Menu Sent]');
-      return;
-    }
-
-    // Check if user is in handoff mode
+    // CRITICAL: Check handoff status FIRST, before anything else
+    // This prevents bot from responding during active handoffs
     const inHandoff = await contextService.isInHandoff(userId);
     if (inHandoff) {
       console.log(`⏸️  User ${userId} in handoff - Bot paused`);
@@ -477,6 +462,22 @@ async function handleCustomerMessage(userId, text, contactName = null) {
         console.log(`📨 Broadcasted customer message to all staff (no assignment yet)`);
       }
       
+      return; // Exit - don't process further during handoff
+    }
+
+    // Detect intent (only after confirming not in handoff)
+    const intent = await intentService.detectIntent(text);
+    console.log(`🎯 Intent: ${intent.type} → ${intent.category || 'general'}`);
+
+    // Check if this is a greeting - send welcome menu
+    if (intent.type === 'greeting') {
+      console.log(`👋 Greeting detected from ${userId} - Sending welcome menu`);
+      const welcomeMenuPayload = welcomeMenu.createWelcomeMenu();
+      await sendWhatsAppMessage(userId, welcomeMenuPayload);
+      
+      // Save to context
+      await contextService.addMessage(userId, 'user', text);
+      await contextService.addMessage(userId, 'assistant', '[Welcome Menu Sent]');
       return;
     }
 

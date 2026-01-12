@@ -189,7 +189,15 @@ async function isInHandoff(userId) {
 
   try {
     const context = await Context.findOne({ userId });
-    return context && context.isRecent() && context.metadata.inHandoff;
+    
+    // CRITICAL FIX: Handoff status should persist regardless of context age
+    // Don't check isRecent() - handoff persists until explicitly ended
+    if (context && context.metadata.inHandoff) {
+      console.log(`🔒 User ${userId} is in handoff mode`);
+      return true;
+    }
+    
+    return false;
   } catch (error) {
     console.error(`❌ Error checking handoff status:`, error.message);
     return false;
