@@ -1,19 +1,22 @@
 // Send WhatsApp message to staff when handoff occurs
 const staffManagement = require('../staff-management');
 
-// Check if using test number (test numbers can only send template messages)
-function isTestNumber() {
-  const phoneNumberId = process.env.PHONE_NUMBER_ID;
-  // Meta's test phone number ID
-  return phoneNumberId === '927001110500161';
-}
-
+/**
+ * Send staff notification via WhatsApp
+ * 
+ * IMPORTANT: WhatsApp has a 24-hour conversation window.
+ * - If staff has messaged the business number in the last 24 hours, free-form messages work
+ * - If not, only template messages will be delivered
+ * 
+ * To ensure notifications work:
+ * 1. Have staff send any message to the business WhatsApp number to open the window
+ * 2. OR create a custom notification template in Meta Business Suite
+ */
 async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaffNumber = null, customerName = null) {
   console.log(`\n📣 Starting WhatsApp staff notification...`);
   console.log(`   Customer: ${userId}`);
   console.log(`   Reason: ${reason}`);
   console.log(`   Specific staff: ${specificStaffNumber || 'All staff'}`);
-  console.log(`   Using test number: ${isTestNumber() ? 'YES (template only)' : 'NO (full messaging)'}`);
   
   // If specific staff requested, notify only them
   let staffNumbers = [];
@@ -41,6 +44,16 @@ async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaff
 
   const url = `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`;
 
+  // Build notification message
+  const notificationMessage = `🚨 *CUSTOMER NEEDS ASSISTANCE*
+
+📱 Customer: ${userId}${customerName ? ` (${customerName})` : ''}
+🔍 Reason: ${reason}
+💬 Message: "${userMessage}"
+⏰ Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+
+${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign to Me" to take this handoff, or reply with "ok" to acknowledge.'}`;
+
   try {
     // Send notification to each staff member (EXCEPT the customer who triggered it)
     for (const staffNumber of staffNumbers) {
@@ -52,57 +65,29 @@ async function notifyStaffViaWhatsApp(userId, userMessage, reason, specificStaff
         continue;
       }
       
-      let data;
-      
-      // If using test number, send template message (only type that gets delivered)
-      // If using real number, send interactive message with buttons
-      if (isTestNumber()) {
-        // Use hello_world template as fallback for test number
-        // Note: For production, create a custom "staff_notification" template
-        data = {
-          messaging_product: 'whatsapp',
-          to: cleanStaffNumber,
-          type: 'template',
-          template: {
-            name: 'hello_world',
-            language: { code: 'en_US' }
-          }
-        };
-        console.log(`   📋 Using template message (test number limitation)`);
-      } else {
-        // Full interactive message for real business numbers
-        const notificationMessage = `🚨 *CUSTOMER NEEDS ASSISTANCE*
-
-📱 Customer: ${userId}${customerName ? ` (${customerName})` : ''}
-🔍 Reason: ${reason}
-💬 Message: "${userMessage}"
-⏰ Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-
-${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign to Me" to take this handoff, or reply with "ok" to acknowledge.'}`;
-
-        data = {
-          messaging_product: 'whatsapp',
-          to: cleanStaffNumber,
-          type: 'interactive',
-          interactive: {
-            type: 'button',
-            body: {
-              text: notificationMessage
-            },
-            action: {
-              buttons: [
-                {
-                  type: 'reply',
-                  reply: {
-                    id: `assign_${userId}`,
-                    title: '✅ Assign to Me'
-                  }
+      // Try interactive message first (works if 24-hour window is open)
+      const interactiveData = {
+        messaging_product: 'whatsapp',
+        to: cleanStaffNumber,
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: {
+            text: notificationMessage
+          },
+          action: {
+            buttons: [
+              {
+                type: 'reply',
+                reply: {
+                  id: `assign_${userId}`,
+                  title: '✅ Assign to Me'
                 }
-              ]
-            }
+              }
+            ]
           }
-        };
-      }
+        }
+      };
 
       const response = await fetch(url, {
         method: 'POST',
@@ -110,25 +95,37 @@ ${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign
           'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(interactiveData)
       });
 
+      const result = await response.json();
+
       if (response.ok) {
-        const result = await response.json();
         console.log(`📲 WhatsApp notification sent to ${cleanStaffNumber}`);
         console.log(`   Message ID: ${result.messages?.[0]?.id || 'unknown'}`);
+        console.log(`   ℹ️  Note: Message will only be delivered if staff has messaged the business in last 24 hours`);
       } else {
-        const errorData = await response.json();
-        console.error(`❌ Failed to notify ${cleanStaffNumber}:`, JSON.stringify(errorData, null, 2));
+        console.error(`❌ Failed to notify ${cleanStaffNumber}:`, JSON.stringify(result, null, 2));
         
         // Log specific error codes for debugging
-        if (errorData.error) {
-          console.error(`   Error code: ${errorData.error.code}`);
-          console.error(`   Error message: ${errorData.error.message}`);
-          if (errorData.error.code === 131030) {
+        if (result.error) {
+          console.error(`   Error code: ${result.error.code}`);
+          console.error(`   Error message: ${result.error.message}`);
+          
+          if (result.error.code === 131047) {
+            console.error(`   💡 24-hour window expired! Staff needs to message the business number first.`);
+            
+            // Fallback: Try template message
+            console.log(`   🔄 Trying template message as fallback...`);
+            const templateResponse = await sendTemplateNotification(url, cleanStaffNumber);
+            if (templateResponse) {
+              console.log(`   ✅ Template notification sent successfully`);
+            }
+          }
+          if (result.error.code === 131030) {
             console.error(`   💡 This phone number may not be in your WhatsApp test recipients list`);
           }
-          if (errorData.error.code === 190) {
+          if (result.error.code === 190) {
             console.error(`   💡 Token may be expired - regenerate in Meta Business Suite`);
           }
         }
@@ -139,6 +136,35 @@ ${specificStaffNumber ? '👤 You were specifically requested!' : 'Click "Assign
   } catch (error) {
     console.error('❌ WhatsApp staff notification failed:', error.message);
     console.error('   Stack:', error.stack);
+    return false;
+  }
+}
+
+/**
+ * Send template notification as fallback when 24-hour window is closed
+ */
+async function sendTemplateNotification(url, staffNumber) {
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: staffNumber,
+        type: 'template',
+        template: {
+          name: 'hello_world',
+          language: { code: 'en_US' }
+        }
+      })
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('   Template fallback failed:', error.message);
     return false;
   }
 }
