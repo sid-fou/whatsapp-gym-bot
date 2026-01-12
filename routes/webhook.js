@@ -532,21 +532,26 @@ For trial bookings and membership details, our team will assist you personally. 
     }
     
     // Check if user is in cooldown period (prevents re-triggering right after handoff ends)
-    const inCooldown = await contextService.isInHandoffCooldown(userId, 10); // 10 minute cooldown
+    const inCooldown = await contextService.isInHandoffCooldown(userId, 5); // 5 minute cooldown (reduced from 10)
     if (inCooldown) {
       console.log(`⏰ User in handoff cooldown period`);
     }
     
-    // ALWAYS allow explicit staff requests AND specific staff requests, even during cooldown
+    // Determine if this should bypass cooldown
+    // - Explicit staff requests always bypass
+    // - Booking intents bypass (user wants to take action)
+    // - Specific staff requests bypass
+    const isBookingIntent = intent.type === 'booking' || intent.category === 'booking';
+    const bypassCooldown = handoffCheck.reason === 'user_requested' || isSpecificStaffRequest || isBookingIntent;
+    
+    // ALWAYS allow explicit staff requests, booking intents, and specific staff requests, even during cooldown
     if (handoffCheck.shouldHandoff) {
-      const bypassCooldown = handoffCheck.reason === 'user_requested' || isSpecificStaffRequest;
-      
       if (inCooldown && !bypassCooldown) {
         console.log(`⏸️  Handoff trigger blocked - User in cooldown (reason: ${handoffCheck.reason})`);
         // Continue with normal bot response instead
       } else {
-        if (isSpecificStaffRequest) {
-          console.log(`✅ Bypassing cooldown - Specific staff request`);
+        if (inCooldown && bypassCooldown) {
+          console.log(`✅ Bypassing cooldown - ${isBookingIntent ? 'Booking intent' : isSpecificStaffRequest ? 'Specific staff request' : 'Explicit request'}`);
         }
         console.log(`🚨 Handoff triggered - Reason: ${handoffCheck.reason}`);
         
@@ -590,12 +595,25 @@ For trial bookings and membership details, our team will assist you personally. 
         return;
       }
       
-      if (isSimpleMessage || inCooldown) {
-        console.log(`⏸️  AI handoff blocked - ${isSimpleMessage ? 'Simple message' : 'Cooldown period'}`);
-        // Send a simple acknowledgment instead
-        const simpleResponse = "Got it! If you need anything else, just let me know.";
+      if (isSimpleMessage) {
+        console.log(`⏸️  AI handoff blocked - Simple message`);
+        // Send a contextual acknowledgment instead
+        const simpleResponse = "Got it! If you need anything else, just let me know. You can also type 'staff' to speak with our team directly.";
         await sendWhatsAppMessage(userId, { text: { body: simpleResponse } });
+        await contextService.addMessage(userId, 'user', text);
+        await contextService.addMessage(userId, 'assistant', simpleResponse);
         logConversation(userId, text, simpleResponse);
+        return;
+      }
+      
+      // If in cooldown but AI wants handoff, let user know they can request staff
+      if (inCooldown) {
+        console.log(`⏸️  AI handoff blocked - Cooldown period (but informing user)`);
+        const cooldownResponse = "I'd be happy to connect you with our team for this! Just type 'staff' or 'talk to staff' and I'll get someone to help you right away. 💪";
+        await sendWhatsAppMessage(userId, { text: { body: cooldownResponse } });
+        await contextService.addMessage(userId, 'user', text);
+        await contextService.addMessage(userId, 'assistant', cooldownResponse);
+        logConversation(userId, text, cooldownResponse);
         return;
       }
       
