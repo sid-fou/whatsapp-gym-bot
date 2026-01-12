@@ -228,17 +228,48 @@ async function addToHandoffQueue(userId, message, reason, customerName = null) {
 
 /**
  * Detect if user is requesting a specific staff member by name
+ * Only matches when user is ASKING to talk to staff, not just mentioning their name
  * @param {string} message - User's message
  * @returns {Promise<Object|null>} Staff member or null
  */
 async function detectRequestedStaff(message) {
   try {
     const allStaff = await staffManagement.getAllStaff(true); // Only active staff
+    const messageLower = message.toLowerCase();
     
-    // Check if any staff member's name is mentioned in the message
+    // Phrases that indicate user wants to TALK TO someone
+    const talkToPatterns = [
+      'talk to',
+      'speak to',
+      'speak with',
+      'talk with',
+      'connect me to',
+      'connect me with',
+      'transfer to',
+      'transfer me to',
+      'can i talk to',
+      'can i speak to',
+      'can i speak with',
+      'want to talk to',
+      'want to speak to',
+      'need to talk to',
+      'need to speak to',
+      'call ',  // "call sunny"
+      'get me ',  // "get me sunny"
+      'i want ',  // "i want sunny" (at start)
+    ];
+    
+    // Check if message contains a "talk to" pattern
+    const hasTalkToPattern = talkToPatterns.some(pattern => messageLower.includes(pattern));
+    
+    if (!hasTalkToPattern) {
+      // User isn't asking to talk to someone, just mentioning a name
+      return null;
+    }
+    
+    // Now check if any staff member's name is mentioned
     for (const staff of allStaff) {
       const nameLower = staff.name.toLowerCase();
-      const messageLower = message.toLowerCase();
       
       if (messageLower.includes(nameLower)) {
         return staff;
