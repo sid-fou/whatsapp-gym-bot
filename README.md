@@ -265,6 +265,17 @@ See [API-DOCUMENTATION.md](docs/API-DOCUMENTATION.md) for complete reference.
 3. Get Phone Number ID and Access Token
 4. Configure webhook URL (when deploying)
 
+#### ⚠️ Test Number Limitations
+If using Meta's **test phone number** (15551409979), you can ONLY send messages to numbers you've added as test recipients:
+
+1. Go to Meta for Developers → Your App → WhatsApp → **API Setup**
+2. Under "Send and receive messages", click the **"To"** dropdown
+3. Click **"Manage phone number list"**
+4. Add your staff numbers and verify them with the code sent via WhatsApp
+5. **Maximum 5 test recipients allowed**
+
+**Important:** Messages sent to numbers NOT in this list will appear as "sent" in logs but will never be delivered. For production, register your own business phone number.
+
 ### 2. OpenRouter API
 1. Sign up at [OpenRouter](https://openrouter.ai)
 2. Create API key
