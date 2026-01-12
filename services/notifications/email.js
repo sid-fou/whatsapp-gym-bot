@@ -1,46 +1,111 @@
+/**
+ * Email Notification Service
+ * Primary: Resend (fast, reliable, works on serverless)
+ * Fallback: Gmail SMTP (if Resend not configured)
+ */
+
 const nodemailer = require('nodemailer');
 const staffManagement = require('../staff-management');
 
-// Create email transporter
-// Using Gmail as example - you can use any SMTP service
-let transporter = null;
+// Try to import Resend (may not be installed)
+let Resend;
+try {
+  Resend = require('resend').Resend;
+} catch (e) {
+  console.log('ℹ️  Resend not installed, will use Gmail SMTP only');
+}
 
-function initializeTransporter() {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️  Email credentials not configured - notifications disabled');
-    return null;
+let resendClient = null;
+let nodemailerTransporter = null;
+
+/**
+ * Initialize email service
+ * Prefers Resend if API key is set, falls back to Gmail
+ */
+function initializeEmailService() {
+  // Try Resend first (faster, more reliable on serverless)
+  if (process.env.RESEND_API_KEY && Resend) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+    console.log('✅ Email notifications enabled (Resend)');
+    return 'resend';
   }
+  
+  // Fallback to Gmail SMTP
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    nodemailerTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    });
+    console.log('✅ Email notifications enabled (Gmail SMTP)');
+    return 'gmail';
+  }
+  
+  console.warn('⚠️  Email credentials not configured - notifications disabled');
+  return null;
+}
 
-  transporter = nodemailer.createTransport({
-    service: 'gmail', // or 'outlook', 'yahoo', etc.
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS // Use App Password for Gmail
-    },
-    // Add timeout settings for Render's free tier
-    connectionTimeout: 10000, // 10 seconds to connect
-    greetingTimeout: 10000,   // 10 seconds for greeting
-    socketTimeout: 15000,     // 15 seconds for socket
-  });
+/**
+ * Send email via Resend
+ */
+async function sendViaResend(to, subject, html) {
+  if (!resendClient) return false;
+  
+  try {
+    const { data, error } = await resendClient.emails.send({
+      from: 'IronCore Fitness <onboarding@resend.dev>', // Use your verified domain in production
+      to: Array.isArray(to) ? to : [to],
+      subject: subject,
+      html: html,
+    });
+    
+    if (error) {
+      console.error('❌ Resend error:', error);
+      return false;
+    }
+    
+    console.log(`📧 Email sent via Resend - ID: ${data.id}`);
+    return true;
+  } catch (error) {
+    console.error('❌ Resend exception:', error.message);
+    return false;
+  }
+}
 
-  console.log('✅ Email notifications enabled');
-  return transporter;
+/**
+ * Send email via Gmail SMTP (fallback)
+ */
+async function sendViaGmail(to, subject, html) {
+  if (!nodemailerTransporter) return false;
+  
+  try {
+    await nodemailerTransporter.sendMail({
+      from: `"IronCore Fitness Bot" <${process.env.EMAIL_USER}>`,
+      to: Array.isArray(to) ? to.join(',') : to,
+      subject: subject,
+      html: html,
+    });
+    
+    console.log(`📧 Email sent via Gmail`);
+    return true;
+  } catch (error) {
+    console.error('❌ Gmail error:', error.message);
+    return false;
+  }
 }
 
 /**
  * Notify staff via email (smart routing to specific staff or all)
- * @param {string} userId - Customer's WhatsApp number
- * @param {string} userMessage - Customer's message
- * @param {string} reason - Handoff reason
- * @param {string} specificStaffPhone - Optional: Only notify this staff member
- * @param {string} customerName - Optional: Customer's name from WhatsApp profile
  */
 async function notifyStaff(userId, userMessage, reason, specificStaffPhone = null, customerName = null) {
-  if (!transporter) {
-    transporter = initializeTransporter();
-  }
-
-  if (!transporter) {
+  // Initialize if not done
+  const provider = initializeEmailService();
+  if (!provider) {
     console.log('📧 Email notification skipped - not configured');
     return false;
   }
@@ -48,102 +113,67 @@ async function notifyStaff(userId, userMessage, reason, specificStaffPhone = nul
   let staffEmails = [];
   
   if (specificStaffPhone) {
-    // Notify only the requested staff member
     const staff = await staffManagement.getStaffByPhone(specificStaffPhone);
     if (staff && staff.email && staff.receiveNotifications) {
       staffEmails = [staff.email];
-      console.log(`📧 Sending email to specific staff: ${staff.name} (${staff.email})`);
-    } else {
-      console.log(`⚠️  Requested staff has no email or notifications disabled`);
-      return false;
+      console.log(`📧 Will notify specific staff: ${staff.email}`);
     }
   } else {
-    // Get all staff with notifications enabled from database (including owner if enabled)
-    const notificationStaff = await staffManagement.getNotificationRecipients();
-    const staffWithEmails = notificationStaff.filter(s => s.email); // Get all with emails (including owner)
+    const allStaff = await staffManagement.getNotificationRecipients();
+    staffEmails = allStaff.map(s => s.email).filter(Boolean);
+    console.log(`📧 Will notify ${staffEmails.length} staff member(s)`);
     
-    if (staffWithEmails.length > 0) {
-      // Use database staff emails (includes owner if notifications enabled)
-      staffEmails = staffWithEmails.map(s => s.email);
-      console.log(`📧 Sending email to ${staffEmails.length} staff member(s) (including owner if enabled)`);
-    } else if (notificationStaff.length === 0) {
-      // Only fall back to env if NO staff in database at all
-      const envEmails = process.env.STAFF_EMAILS?.split(',') || [];
-      staffEmails = envEmails;
-    } else {
-      // Staff exists in database but have no emails - don't send
-      console.log('ℹ️  Staff in database have no email addresses');
+    // Add owner email from env if configured
+    if (process.env.OWNER_EMAIL && !staffEmails.includes(process.env.OWNER_EMAIL)) {
+      staffEmails.push(process.env.OWNER_EMAIL);
     }
   }
   
   if (staffEmails.length === 0) {
-    console.warn('⚠️  No staff emails to notify');
+    console.log('📧 No staff emails configured');
     return false;
   }
 
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: staffEmails.join(','),
-    subject: `🚨 Human Assistance Required - IronCore Fitness Bot`,
-    html: `
-      <h2>Customer Needs Assistance</h2>
-      <p><strong>Customer Name:</strong> ${customerName || 'Unknown'}</p>
-      <p><strong>Phone Number:</strong> ${userId}</p>
-      <p><strong>Reason:</strong> ${reason}</p>
-      <p><strong>Message:</strong> ${userMessage}</p>
-      <p><strong>Time:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
-      <hr>
-      <p><strong>Action Required:</strong> Please respond to the customer on WhatsApp</p>
-      <p><em>Customer has been informed that staff will contact them shortly.</em></p>
-    `
-  };
+  console.log(`📧 Sending email to ${staffEmails.length} staff member(s) (including owner if enabled)`);
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`📧 Staff notification sent to ${staffEmails.length} email(s)`);
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to send email notification:', error.message);
-    
-    // For timeout errors, try once more with fresh connection
-    if (error.message.includes('timeout') || error.message.includes('ETIMEDOUT')) {
-      console.log('🔄 Retrying email with fresh connection...');
-      try {
-        // Reset transporter for fresh connection
-        transporter = initializeTransporter();
-        if (transporter) {
-          await transporter.sendMail(mailOptions);
-          console.log(`📧 Staff notification sent on retry`);
-          return true;
-        }
-      } catch (retryError) {
-        console.error('❌ Email retry also failed:', retryError.message);
-      }
-    }
-    
-    return false;
+  const subject = `🚨 Human Assistance Required - IronCore Fitness Bot`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #e74c3c;">🚨 Customer Needs Assistance</h2>
+      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <p><strong>👤 Customer Name:</strong> ${customerName || 'Unknown'}</p>
+        <p><strong>📱 Phone Number:</strong> ${userId}</p>
+        <p><strong>🔍 Reason:</strong> ${reason}</p>
+        <p><strong>💬 Message:</strong> "${userMessage}"</p>
+        <p><strong>⏰ Time:</strong> ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+      </div>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+      <p><strong>⚡ Action Required:</strong> Please respond to the customer on WhatsApp</p>
+      <p style="color: #666; font-size: 14px;"><em>Customer has been informed that staff will contact them shortly.</em></p>
+    </div>
+  `;
+
+  // Try Resend first (faster), then Gmail
+  if (resendClient) {
+    const success = await sendViaResend(staffEmails, subject, html);
+    if (success) return true;
+    console.log('🔄 Resend failed, trying Gmail fallback...');
   }
+  
+  if (nodemailerTransporter) {
+    return await sendViaGmail(staffEmails, subject, html);
+  }
+  
+  return false;
 }
 
 /**
  * Notify owner (ESCALATION) when handoff is unaccepted for 5+ minutes
- * This is sent to owner EVEN IF they already received initial notification
- * @param {string} userId - Customer's WhatsApp number
- * @param {string} userMessage - Customer's message
- * @param {string} reason - Handoff reason
- * @param {number} minutesWaiting - How long customer has been waiting
- * @param {string} customerName - Optional: Customer's name from WhatsApp profile
  */
 async function notifyOwnerEscalation(userId, userMessage, reason, minutesWaiting, customerName = null) {
-  if (!transporter) {
-    transporter = initializeTransporter();
-  }
+  const provider = initializeEmailService();
+  if (!provider) return false;
 
-  if (!transporter) {
-    return false;
-  }
-
-  // Get owner email
   const owner = await staffManagement.getAllStaff().then(staff => 
     staff.find(s => s.role === 'owner' && s.isActive)
   );
@@ -153,69 +183,30 @@ async function notifyOwnerEscalation(userId, userMessage, reason, minutesWaiting
     return false;
   }
 
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: owner.email,
-    subject: `⚠️ ESCALATION: Unaccepted Handoff - ${minutesWaiting} mins`,
-    html: `
-      <h2 style="color: #dc2626;">⚠️ Unaccepted Handoff Escalation</h2>
-      <p><strong>Customer has been waiting for ${minutesWaiting} minutes without staff response.</strong></p>
-      <hr>
-      <p><strong>Customer Name:</strong> ${customerName || 'Unknown'}</p>
-      <p><strong>Phone Number:</strong> ${userId}</p>
-      <p><strong>Reason:</strong> ${reason}</p>
-      <p><strong>Message:</strong> ${userMessage}</p>
-      <p><strong>Waiting Since:</strong> ${minutesWaiting} minutes ago</p>
-      <hr>
-      <p><strong>Action Required:</strong> Please check the handoffs dashboard or respond to customer directly.</p>
-      <p><em>This is an automated escalation notification.</em></p>
-    `
-  };
+  const subject = `🔴 URGENT: Customer Waiting ${minutesWaiting}+ Minutes - IronCore Fitness`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #c0392b;">🔴 URGENT ESCALATION</h2>
+      <p style="color: #e74c3c; font-size: 18px;">A customer has been waiting for <strong>${minutesWaiting} minutes</strong> without staff response!</p>
+      <div style="background: #fdf2f2; padding: 20px; border-radius: 8px; border-left: 4px solid #e74c3c; margin: 20px 0;">
+        <p><strong>👤 Customer Name:</strong> ${customerName || 'Unknown'}</p>
+        <p><strong>📱 Phone Number:</strong> ${userId}</p>
+        <p><strong>🔍 Reason:</strong> ${reason}</p>
+        <p><strong>💬 Message:</strong> "${userMessage}"</p>
+        <p><strong>⏰ Waiting Since:</strong> ${new Date(Date.now() - minutesWaiting * 60000).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+      </div>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+      <p><strong>⚡ Immediate Action Required!</strong></p>
+    </div>
+  `;
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`📧 Escalation email sent to owner: ${owner.email}`);
-    return true;
-  } catch (error) {
-    console.error('❌ Failed to send escalation email:', error.message);
-    return false;
+  if (resendClient) {
+    const success = await sendViaResend(owner.email, subject, html);
+    if (success) return true;
   }
-}
-
-// Alternative: Send notification via Slack/Discord webhook
-async function notifyViaWebhook(userId, userMessage, reason) {
-  const webhookUrl = process.env.NOTIFICATION_WEBHOOK_URL;
   
-  if (!webhookUrl) {
-    return false;
-  }
-
-  const payload = {
-    text: `🚨 *Human Assistance Required*`,
-    blocks: [
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `*Customer:* ${userId}\n*Reason:* ${reason}\n*Message:* ${userMessage}\n*Time:* ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`
-        }
-      }
-    ]
-  };
-
-  try {
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    if (response.ok) {
-      console.log('📢 Webhook notification sent');
-      return true;
-    }
-  } catch (error) {
-    console.error('❌ Webhook notification failed:', error.message);
+  if (nodemailerTransporter) {
+    return await sendViaGmail(owner.email, subject, html);
   }
   
   return false;
@@ -224,5 +215,5 @@ async function notifyViaWebhook(userId, userMessage, reason) {
 module.exports = {
   notifyStaff,
   notifyOwnerEscalation,
-  notifyViaWebhook
+  initializeEmailService
 };
